@@ -58,7 +58,7 @@ type AssignmentProof struct {
 	RequesterAddress string `json:"requester_address,omitempty"`
 
 	// Seed is used for deterministic verification (optional).
-	Seed string `json:"seed,omitempty"`
+	Seed [32]byte `json:"seed,omitempty"`
 }
 
 // VerificationType specifies what voters should verify during the voting process.
@@ -119,15 +119,15 @@ func (v VerificationType) IsValid() bool {
 }
 
 // VoteType represents the outcome of a node's verification of Respondent behavior.
-type VoteType int
+type VoteType uint16
 
 const (
 	// VotePositive indicates the Respondent responded honestly with valid data.
-	VotePositive VoteType = 1
+	VotePositive VoteType = iota
 	// VoteNegative indicates the Respondent did not respond or was dishonest.
-	VoteNegative VoteType = 2
+	VoteNegative
 	// (Placeholder for future errors)
-	VoteInvalid VoteType = 3
+	VoteInvalid
 )
 
 // String returns a human-readable representation of the VoteType.
@@ -154,11 +154,11 @@ type VotingOutcome int
 
 const (
 	// OutcomePositive indicates that at least one node voted positively for the inference and got the payload.
-	OutcomePositive VotingOutcome = 1
+	OutcomePositive VotingOutcome = iota
 	// OutcomeNegative indicates that at all nodes voted negatively for the inference and did not get the payload.
-	OutcomeNegative VotingOutcome = 2
+	OutcomeNegative
 	// OutcomeInconclusive for cases, when the voting went wrong
-	OutcomeInconclusive VotingOutcome = 3
+	OutcomeInconclusive
 )
 
 // String returns a human-readable representation of the VotingOutcome.
@@ -287,4 +287,7 @@ type VotingConfig struct {
 
 	// MaxRetries is the maximum number of times to retry contacting a node.
 	MaxRetries int `json:"max_retries"`
+
+	// MaxNumSkips is the maximum number of nodes that may be skipped during a vote
+	MaxNumSkips uint8 `json:"max_num_skips"`
 }
