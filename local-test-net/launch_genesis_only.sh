@@ -6,7 +6,7 @@ export PUBLIC_SERVER_PORT=9000
 export ML_SERVER_PORT=9001
 export ADMIN_SERVER_PORT=9002
 export KEY_NAME=genesis
-export NODE_CONFIG="node_payload_mock-server_${KEY_NAME}.json"
+export NODE_CONFIG="node_payload_mock_server_${KEY_NAME}.json"
 rm -r "prod-local" || true
 export PUBLIC_URL="http://${KEY_NAME}-api:8080"
 export POC_CALLBACK_URL="http://${KEY_NAME}-api:9100"

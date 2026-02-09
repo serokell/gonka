@@ -1,15 +1,20 @@
 services:
   chain-node:
+    #command: ["sh", "./init-docker-genesis-multi.sh"]
     command: ["sh", "./init-docker-genesis.sh"]
     environment:
       - IS_GENESIS=true
       - INIT_TGBOT=false
       - TGBOT_PRIVATE_KEY_PASS=${TGBOT_PRIVATE_KEY_PASS:-defaultpassword}
       - PUBLIC_URL=${PUBLIC_URL}
+      - NUM_PARTICIPANTS=2
+      - NUM_USERS=5
     ports:
       - "9090:9090"   # Additional gRPC port for genesis
       - "9091:9091"   # Additional gRPC-web port for genesis
       - "1317:1317"   # REST API port for genesis
+    volumes:
+      - ./prod-local/shared:/shared
 
   api:
     environment:
