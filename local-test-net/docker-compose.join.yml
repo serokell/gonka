@@ -8,6 +8,8 @@ services:
       - SYNC_WITH_SNAPSHOTS=${SYNC_WITH_SNAPSHOTS}
 
   api:
+    volumes:
+      - ${IMPORT_KEYS_DIR}:/keys
     environment:
       - DAPI_CHAIN_NODE__SEED_API_URL=${SEED_API_URL}
       - CREATE_KEY=${CREATE_KEY:-true}
@@ -15,4 +17,5 @@ services:
       - ACCOUNT_PUBKEY=${ACCOUNT_PUBKEY}
       - KEYRING_BACKEND=${KEYRING_BACKEND:-test}
       - KEYRING_PASSWORD=${KEYRING_PASSWORD}
-      - KEY_NAME=${KEY_NAME}-WARM
+      - KEY_NAME=${KEY_NAME}_warm
+      - IMPORT_KEYS_DIR=/keys

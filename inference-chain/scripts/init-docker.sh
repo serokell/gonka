@@ -121,6 +121,25 @@ update_configs() {
   fi
 }
 
+import_external_keys() {
+  if [ -z "${IMPORT_KEYS_DIR-}" ]; then
+    return
+  fi
+  echo "Importing keys from $IMPORT_KEYS_DIR"
+
+  # Validator consensus key
+  if [ -f "$IMPORT_KEYS_DIR/priv_validator_key.json" ]; then
+    cp "$IMPORT_KEYS_DIR/priv_validator_key.json" "$STATE_DIR/config/priv_validator_key.json"
+    echo "Imported priv_validator_key.json"
+  fi
+
+  # P2P node identity key
+  if [ -f "$IMPORT_KEYS_DIR/node_key.json" ]; then
+    cp "$IMPORT_KEYS_DIR/node_key.json" "$STATE_DIR/config/node_key.json"
+    echo "Imported node_key.json"
+  fi
+}
+
 configure_tmkms() {
   if [ -n "${TMKMS_PORT-}" ]; then
     echo "Configuring TMKMS (port $TMKMS_PORT)"
@@ -167,6 +186,9 @@ if $FIRST_RUN; then
   else
     echo "Node already initialised, skipping initialisation"
   fi
+
+  import_external_keys
+
   if [ "${INIT_ONLY:-false}" = "true" ]; then
     echo "Initialisation complete"
     echo "nodeId: $($APP_NAME tendermint show-node-id)"

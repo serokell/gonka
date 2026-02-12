@@ -1,6 +1,5 @@
 services:
   chain-node:
-    #command: ["sh", "./init-docker-genesis-multi.sh"]
     command: ["sh", "./init-docker-genesis.sh"]
     environment:
       - IS_GENESIS=true

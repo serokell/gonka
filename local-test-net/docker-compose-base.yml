@@ -6,6 +6,7 @@ services:
     volumes:
       - ./prod-local/${KEY_NAME}:/root/.inference
       - ./prod-local/shared:/shared
+      - ${IMPORT_KEYS_DIR}:/keys
     environment:
       - KEY_NAME=${KEY_NAME}
       - REST_API_ACTIVE=${REST_API_ACTIVE:-false}
@@ -14,6 +15,7 @@ services:
       - SNAPSHOT_KEEP_RECENT=5
       - DEBUG=false
       - IS_TEST_NET=true
+      - IMPORT_KEYS_DIR=/keys
     ports:
       - "${RPC_PORT:-26657}:26657"  # RPC
       - "${P2P_PORT:-26656}:26656"  # P2P
