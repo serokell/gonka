@@ -33,6 +33,39 @@ CHAIN_ID="gonka-mainnet"
 COIN_DENOM="ngonka"
 STATE_DIR="/root/.inference"
 
+import_external_keys() {
+  if [ -z "${IMPORT_KEYS_DIR-}" ]; then
+    return
+  fi
+  echo "Importing keys from $IMPORT_KEYS_DIR"
+
+  # Validator consensus key
+  if [ -f "$IMPORT_KEYS_DIR/priv_validator_key.json" ]; then
+    cp "$IMPORT_KEYS_DIR/priv_validator_key.json" "$STATE_DIR/config/priv_validator_key.json"
+    echo "Imported priv_validator_key.json"
+  fi
+
+  # P2P node identity key
+  if [ -f "$IMPORT_KEYS_DIR/node_key.json" ]; then
+    cp "$IMPORT_KEYS_DIR/node_key.json" "$STATE_DIR/config/node_key.json"
+    echo "Imported node_key.json"
+  fi
+
+  # Cold account key (unarmored hex)
+  if [ -f "$IMPORT_KEYS_DIR/cold.hex" ]; then
+    $APP_NAME keys import-hex "$KEY_NAME" "$(cat "$IMPORT_KEYS_DIR/cold.hex")" \
+      --keyring-backend "$KEYRING_BACKEND" --keyring-dir "$STATE_DIR"
+    echo "Imported cold key as $KEY_NAME"
+  fi
+
+  # Warm account key (unarmored hex)
+  if [ -f "$IMPORT_KEYS_DIR/warm.hex" ]; then
+    $APP_NAME keys import-hex "${KEY_NAME}_warm" "$(cat "$IMPORT_KEYS_DIR/warm.hex")" \
+      --keyring-backend "$KEYRING_BACKEND" --keyring-dir "$STATE_DIR"
+    echo "Imported warm key as ${KEY_NAME}_warm"
+  fi
+}
+
 update_configs() {
   if [ "${REST_API_ACTIVE:-}" = true ]; then
     "$APP_NAME" patch-toml "$STATE_DIR/config/app.toml" app_overrides.toml
@@ -90,19 +123,22 @@ sed -Ei "s/^seeds = .*$/seeds = \"\"/g" \
 
 
 echo "Creating the key"
-# Create a key
-$APP_NAME keys \
-    --keyring-backend $KEYRING_BACKEND --keyring-dir "$STATE_DIR" \
-    add "$KEY_NAME"
+KEY_NAME_WARM="${KEY_NAME}_warm"
+
+if [ -n "${IMPORT_KEYS_DIR-}" ]; then
+  import_external_keys
+else
+  $APP_NAME keys \
+      --keyring-backend $KEYRING_BACKEND --keyring-dir "$STATE_DIR" \
+      add "$KEY_NAME"
+  $APP_NAME keys \
+      --keyring-backend $KEYRING_BACKEND --keyring-dir "$STATE_DIR" \
+      add "$KEY_NAME_WARM"
+fi
+
 $APP_NAME keys \
     --keyring-backend $KEYRING_BACKEND --keyring-dir "$STATE_DIR" \
     add "POOL_product_science_inc"
-
-# Create warm key for ML operations
-KEY_NAME_WARM="${KEY_NAME}_warm"
-$APP_NAME keys \
-    --keyring-backend $KEYRING_BACKEND --keyring-dir "$STATE_DIR" \
-    add "$KEY_NAME_WARM"
 
 modify_genesis_file() {
   local json_file="$HOME/.inference/config/genesis.json"
