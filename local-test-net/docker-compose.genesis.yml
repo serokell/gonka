@@ -6,14 +6,14 @@ services:
       - INIT_TGBOT=false
       - TGBOT_PRIVATE_KEY_PASS=${TGBOT_PRIVATE_KEY_PASS:-defaultpassword}
       - PUBLIC_URL=${PUBLIC_URL}
-      - NUM_PARTICIPANTS=2
-      - NUM_USERS=5
+      - MONEYBAG_KEYS_DIR=/moneybag-keys
     ports:
       - "9090:9090"   # Additional gRPC port for genesis
       - "9091:9091"   # Additional gRPC-web port for genesis
       - "1317:1317"   # REST API port for genesis
     volumes:
       - ./prod-local/shared:/shared
+      - ${MONEYBAG_KEYS_DIR}:/moneybag-keys
 
   api:
     environment:

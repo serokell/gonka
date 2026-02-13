@@ -32,6 +32,7 @@ fi
 
 export DASHBOARD_PORT=5173
 export IMPORT_KEYS_DIR=./genesis-keys
+export MONEYBAG_KEYS_DIR=./moneybag-keys
 
 echo "Starting genesis node"
 docker compose -p genesis -f docker-compose-base.yml -f docker-compose.genesis.yml -f docker-compose.proxy.yml -f docker-compose.explorer.yml up -d
