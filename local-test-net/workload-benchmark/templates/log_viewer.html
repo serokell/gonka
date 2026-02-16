@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Experiment Log Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #252525;
+            --bg-tertiary: #2d2d2d;
+            --accent: #4a9eff;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-color: #3a3a3a;
+            --warning: #ff5555;
+        }
+
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .filter-section {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .run-experiment-section {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .run-experiment-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .run-experiment-btn:hover {
+            background: #3a8eef;
+        }
+
+        .run-experiment-btn:active {
+            background: #2a7edf;
+        }
+
+        .add-scheduler-btn {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .add-scheduler-btn:hover {
+            background: var(--bg-primary);
+            border-color: var(--accent);
+        }
+
+        .filter-section {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .filter-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        #schedulerFilter {
+            width: 100%;
+            padding: 8px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            color: var(--text-primary);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        #schedulerFilter:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .log-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .log-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid transparent;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .log-item:hover {
+            border-left-color: var(--accent);
+        }
+
+        .log-item.active {
+            border-left-color: var(--accent);
+            background: var(--bg-primary);
+        }
+
+        .log-item-name {
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+
+        .log-item-meta {
+            font-size: 10px;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .scheduler-badge {
+            background: var(--bg-primary);
+            color: var(--accent);
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+            height: 100vh;
+        }
+
+        .content-top {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .content-bottom {
+            height: 900px;
+            flex-shrink: 0;
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            overflow-y: auto;
+        }
+
+        .chart-section {
+            margin-bottom: 30px;
+        }
+
+        .chart-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .log-viewer {
+            flex: 1;
+            min-height: 0;
+            padding: 20px;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+
+        .section-header {
+            padding: 12px 20px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .log-file-name {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        .log-content {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .chart-container {
+            height: 400px;
+            position: relative;
+        }
+
+        .chart-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--accent);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .modal-close {
+            font-size: 28px;
+            font-weight: 300;
+            color: var(--text-secondary);
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 20px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .param-group {
+            margin-bottom: 15px;
+        }
+
+        .param-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .param-group input {
+            width: 100%;
+            padding: 8px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            color: var(--text-primary);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 13px;
+        }
+
+        .param-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .param-group select {
+            width: 100%;
+            padding: 8px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            color: var(--text-primary);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .param-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .input-hint {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            font-style: italic;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #3a8eef;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-primary);
+        }
+
+        .experiment-status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .experiment-status.success {
+            display: block;
+            background: rgba(0, 204, 102, 0.2);
+            color: #00cc66;
+            border: 1px solid #00cc66;
+        }
+
+        .experiment-status.error {
+            display: block;
+            background: rgba(255, 85, 85, 0.2);
+            color: #ff5555;
+            border: 1px solid #ff5555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="header">
+                <h1>Experiment Log Viewer</h1>
+            </div>
+            
+            <div class="run-experiment-section">
+                <button id="runExperimentBtn" class="run-experiment-btn">
+                    ▶ Run Experiment
+                </button>
+                <button id="addSchedulerBtn" class="add-scheduler-btn">
+                    + Add Scheduler
+                </button>
+            </div>
+            
+            <div class="filter-section">
+                <div class="filter-label">Filter by scheduler</div>
+                <select id="schedulerFilter">
+                    <option value="">All Schedulers</option>
+                </select>
+            </div>
+            
+            <div class="log-list" id="logList">
+                <div class="empty-state">
+                    <div class="loading"></div>
+                    <div style="margin-top: 20px;">Loading logs...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="content-top">
+                <div class="section-header">
+                    <div class="section-title">Log content</div>
+                    <div id="logFileName" class="log-file-name"></div>
+                </div>
+                <div class="log-viewer" id="logViewer">
+                    <div class="empty-state">
+                        <div class="empty-icon">📊</div>
+                        <div>Select a log file to view its contents</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content-bottom">
+                <div class="chart-section">
+                    <div class="chart-title">Server/API Latency vs RPS</div>
+                    <div class="chart-container">
+                        <canvas id="serverLatencyChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-section">
+                    <div class="chart-title">Blockchain Processing Time vs RPS</div>
+                    <div class="chart-container">
+                        <canvas id="blockchainLatencyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run Experiment Modal -->
+    <div id="experimentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Run Experiment</h2>
+                <span class="modal-close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="param-group">
+                    <label for="schedule">Schedule</label>
+                    <select id="schedule" class="schedule-select">
+                        <option value="">Loading schedules...</option>
+                    </select>
+                </div>
+                <div class="param-group">
+                    <label for="duration">Duration (seconds)</label>
+                    <input type="number" id="duration" placeholder="15">
+                </div>
+                <div class="param-group">
+                    <label for="workers">Workers</label>
+                    <input type="number" id="workers" placeholder="300">
+                </div>
+                <div class="param-group">
+                    <label for="latencyDelay">Latency Delay (seconds)</label>
+                    <input type="number" id="latencyDelay" placeholder="3">
+                </div>
+                <div class="param-group">
+                    <label for="latencyInterval">Latency Interval (seconds)</label>
+                    <input type="number" id="latencyInterval" placeholder="2">
+                </div>
+                <div class="param-group">
+                    <label for="latencyCount">Latency Count</label>
+                    <input type="number" id="latencyCount" placeholder="3">
+                </div>
+                <div id="experimentStatus" class="experiment-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="startExperimentBtn" class="btn btn-primary">Start</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Scheduler Modal -->
+    <div id="addSchedulerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Scheduler</h2>
+                <span class="modal-close-scheduler">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="param-group">
+                    <label for="schedulerName">Scheduler Name</label>
+                    <input type="text" id="schedulerName" placeholder="e.g., fibonacci_long">
+                    <div class="input-hint">Only letters, numbers, and underscores</div>
+                </div>
+                <div class="param-group">
+                    <label for="schedulerValues">RPS Values (comma-separated)</label>
+                    <input type="text" id="schedulerValues" placeholder="e.g., 1, 2, 3, 5, 8, 13, 21, 34">
+                    <div class="input-hint">Example: 1, 2, 3, 5, 8, 13, 21, 34</div>
+                </div>
+                <div id="schedulerStatus" class="experiment-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelSchedulerBtn" class="btn btn-secondary">Cancel</button>
+                <button id="saveSchedulerBtn" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentLog = null;
+        let serverChart = null;
+        let blockchainChart = null;
+        let refreshInterval = null;
+
+        // Initialize Server/API Latency Chart
+        const serverCtx = document.getElementById('serverLatencyChart').getContext('2d');
+        serverChart = new Chart(serverCtx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Average',
+                        data: [],
+                        borderColor: '#4a9eff',
+                        backgroundColor: 'rgba(74, 158, 255, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Min',
+                        data: [],
+                        borderColor: '#00cc66',
+                        backgroundColor: 'rgba(0, 204, 102, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Max',
+                        data: [],
+                        borderColor: '#ff9933',
+                        backgroundColor: 'rgba(255, 153, 51, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: getChartOptions('Server/API Latency (seconds)', 1.0)
+        });
+
+        // Initialize Blockchain Processing Time Chart
+        const blockchainCtx = document.getElementById('blockchainLatencyChart').getContext('2d');
+        blockchainChart = new Chart(blockchainCtx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Average',
+                        data: [],
+                        borderColor: '#4a9eff',
+                        backgroundColor: 'rgba(74, 158, 255, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Min',
+                        data: [],
+                        borderColor: '#00cc66',
+                        backgroundColor: 'rgba(0, 204, 102, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Max',
+                        data: [],
+                        borderColor: '#ff9933',
+                        backgroundColor: 'rgba(255, 153, 51, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: getChartOptions('Blockchain Processing Time (seconds)', null)
+        });
+
+        function getChartOptions(yAxisLabel, thresholdValue) {
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#e0e0e0',
+                            font: {
+                                family: 'Roboto Mono',
+                                size: 11
+                            },
+                            usePointStyle: true,
+                            padding: 10
+                        }
+                    },
+                    datalabels: {
+                        display: true,
+                        align: 'top',
+                        offset: 6,
+                        color: '#e0e0e0',
+                        font: {
+                            size: 11,
+                            family: 'Roboto Mono',
+                            weight: '500'
+                        },
+                        formatter: function(value, context) {
+                            // Only show labels for the average line to avoid clutter
+                            if (context.datasetIndex === 0) {
+                                return value.y.toFixed(3) + 's';
+                            }
+                            return '';
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        title: {
+                            display: true,
+                            text: 'Requests Per Second (RPS)',
+                            color: '#a0a0a0',
+                            font: {
+                                family: 'Roboto Mono',
+                                size: 14,
+                                weight: '500'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(74, 158, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#a0a0a0',
+                            font: {
+                                family: 'Roboto Mono',
+                                size: 12
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: yAxisLabel,
+                            color: '#a0a0a0',
+                            font: {
+                                family: 'Roboto Mono',
+                                size: 14,
+                                weight: '500'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(74, 158, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#a0a0a0',
+                            font: {
+                                family: 'Roboto Mono',
+                                size: 12
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Add threshold line if specified
+            if (thresholdValue !== null) {
+                options.plugins.annotation = {
+                    annotations: {
+                        thresholdLine: {
+                            type: 'line',
+                            yMin: thresholdValue,
+                            yMax: thresholdValue,
+                            borderColor: '#ff5555',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            label: {
+                                content: `Threshold: ${thresholdValue}s`,
+                                display: true,
+                                position: 'end',
+                                backgroundColor: 'rgba(255, 85, 85, 0.8)',
+                                color: '#fff',
+                                font: {
+                                    size: 11,
+                                    family: 'Roboto Mono'
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+
+            return options;
+        }
+
+        // Fetch and display logs
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const logs = await response.json();
+                
+                // Get unique schedulers
+                const schedulers = [...new Set(logs.map(log => log.scheduler))];
+                updateSchedulerFilter(schedulers);
+                
+                // Apply filter
+                const filter = document.getElementById('schedulerFilter').value;
+                const filteredLogs = filter ? logs.filter(log => log.scheduler === filter) : logs;
+                
+                displayLogs(filteredLogs);
+            } catch (error) {
+                console.error('Error loading logs:', error);
+            }
+        }
+
+        function updateSchedulerFilter(schedulers) {
+            const filter = document.getElementById('schedulerFilter');
+            const currentValue = filter.value;
+            
+            // Clear options except "All"
+            filter.innerHTML = '<option value="">All Schedulers</option>';
+            
+            // Add scheduler options
+            schedulers.forEach(scheduler => {
+                const option = document.createElement('option');
+                option.value = scheduler;
+                option.textContent = scheduler.charAt(0).toUpperCase() + scheduler.slice(1);
+                filter.appendChild(option);
+            });
+            
+            // Restore selection if it still exists
+            if (schedulers.includes(currentValue)) {
+                filter.value = currentValue;
+            }
+        }
+
+        function displayLogs(logs) {
+            const logList = document.getElementById('logList');
+            
+            if (logs.length === 0) {
+                logList.innerHTML = '<div class="empty-state"><div>No logs found</div></div>';
+                return;
+            }
+            
+            logList.innerHTML = logs.map(log => `
+                <div class="log-item ${currentLog === log.filename ? 'active' : ''}" 
+                     onclick="selectLog('${log.filename}')">
+                    <div class="log-item-name">${log.filename}</div>
+                    <div class="log-item-meta">
+                        <span class="scheduler-badge">${log.scheduler}</span>
+                        <span>${log.timestamp}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function selectLog(filename) {
+            currentLog = filename;
+            
+            // Update active state
+            document.querySelectorAll('.log-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.closest('.log-item').classList.add('active');
+            
+            // Update filename display
+            document.getElementById('logFileName').textContent = filename;
+            
+            // Load log content
+            await loadLogContent(filename);
+            await loadLogData(filename);
+        }
+
+        async function loadLogContent(filename) {
+            try {
+                const response = await fetch(`/api/log/${filename}`);
+                const data = await response.json();
+                
+                const viewer = document.getElementById('logViewer');
+                
+                // Check if user is at the bottom before update
+                const isAtBottom = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight < 50;
+                
+                // Save current scroll position
+                const scrollTop = viewer.scrollTop;
+                const scrollLeft = viewer.scrollLeft;
+                
+                // Only update if content has changed
+                const newContent = data.content;
+                const currentContent = viewer.querySelector('.log-content');
+                
+                if (!currentContent || currentContent.textContent !== newContent) {
+                    viewer.innerHTML = `<div class="log-content">${newContent}</div>`;
+                    
+                    // Auto-scroll to bottom if user was at bottom, otherwise restore position
+                    if (isAtBottom) {
+                        viewer.scrollTop = viewer.scrollHeight;
+                    } else {
+                        viewer.scrollTop = scrollTop;
+                    }
+                    viewer.scrollLeft = scrollLeft;
+                }
+            } catch (error) {
+                console.error('Error loading log content:', error);
+            }
+        }
+
+        async function loadLogData(filename) {
+            try {
+                const response = await fetch(`/api/log/${filename}/data`);
+                const data = await response.json();
+                
+                updateChart(data.steps);
+            } catch (error) {
+                console.error('Error loading log data:', error);
+            }
+        }
+
+        function updateChart(steps) {
+            if (!steps || steps.length === 0) return;
+            
+            // Sort by RPS for proper line drawing
+            const sortedSteps = [...steps].sort((a, b) => a.rps - b.rps);
+            
+            // Server/API Latency data
+            const serverAvgData = sortedSteps.map(s => ({x: s.rps, y: s.server_latency_avg}));
+            const serverMinData = sortedSteps.map(s => ({x: s.rps, y: s.server_latency_min}));
+            const serverMaxData = sortedSteps.map(s => ({x: s.rps, y: s.server_latency_max}));
+            
+            serverChart.data.datasets[0].data = serverAvgData;
+            serverChart.data.datasets[1].data = serverMinData;
+            serverChart.data.datasets[2].data = serverMaxData;
+            serverChart.update();
+            
+            // Blockchain Processing Time data
+            const blockchainAvgData = sortedSteps.map(s => ({x: s.rps, y: s.blockchain_latency_avg}));
+            const blockchainMinData = sortedSteps.map(s => ({x: s.rps, y: s.blockchain_latency_min}));
+            const blockchainMaxData = sortedSteps.map(s => ({x: s.rps, y: s.blockchain_latency_max}));
+            
+            blockchainChart.data.datasets[0].data = blockchainAvgData;
+            blockchainChart.data.datasets[1].data = blockchainMinData;
+            blockchainChart.data.datasets[2].data = blockchainMaxData;
+            blockchainChart.update();
+        }
+
+        // Event listeners
+        document.getElementById('schedulerFilter').addEventListener('change', loadLogs);
+
+        // Auto-refresh every 3 seconds
+        function startAutoRefresh() {
+            loadLogs();
+            refreshInterval = setInterval(() => {
+                loadLogs();
+                if (currentLog) {
+                    loadLogContent(currentLog);
+                    loadLogData(currentLog);
+                }
+            }, 3000);
+        }
+
+        // Initialize
+        startAutoRefresh();
+        loadSchedules();
+
+        // Global schedules object
+        let schedules = {};
+
+        // Load schedules from API
+        async function loadSchedules() {
+            try {
+                const response = await fetch('/api/schedules');
+                schedules = await response.json();
+                populateScheduleDropdown();
+            } catch (error) {
+                console.error('Error loading schedules:', error);
+            }
+        }
+
+        // Populate schedule dropdown
+        function populateScheduleDropdown() {
+            const select = document.getElementById('schedule');
+            select.innerHTML = '<option value="">Select a schedule...</option>';
+            
+            for (const [name, values] of Object.entries(schedules)) {
+                const option = document.createElement('option');
+                option.value = name;
+                // Show first few values as preview
+                const preview = values.slice(0, 5).join(', ');
+                const more = values.length > 5 ? ', ...' : '';
+                option.textContent = `${name} [${preview}${more}]`;
+                select.appendChild(option);
+            }
+        }
+
+        // Modal handling
+        const modal = document.getElementById('experimentModal');
+        const runBtn = document.getElementById('runExperimentBtn');
+        const closeBtn = document.querySelector('.modal-close');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const startBtn = document.getElementById('startExperimentBtn');
+
+        const schedulerModal = document.getElementById('addSchedulerModal');
+        const addSchedulerBtn = document.getElementById('addSchedulerBtn');
+        const closeSchedulerBtn = document.querySelector('.modal-close-scheduler');
+        const cancelSchedulerBtn = document.getElementById('cancelSchedulerBtn');
+        const saveSchedulerBtn = document.getElementById('saveSchedulerBtn');
+
+        // Load last parameters from localStorage
+        function loadLastParameters() {
+            const lastParams = localStorage.getItem('experimentParams');
+            if (lastParams) {
+                const params = JSON.parse(lastParams);
+                document.getElementById('schedule').value = params.schedule || '';
+                document.getElementById('duration').value = params.duration || '';
+                document.getElementById('workers').value = params.workers || '';
+                document.getElementById('latencyDelay').value = params.latencyDelay || '';
+                document.getElementById('latencyInterval').value = params.latencyInterval || '';
+                document.getElementById('latencyCount').value = params.latencyCount || '';
+            }
+        }
+
+        // Save parameters to localStorage
+        function saveParameters() {
+            const params = {
+                schedule: document.getElementById('schedule').value,
+                duration: parseInt(document.getElementById('duration').value),
+                workers: parseInt(document.getElementById('workers').value),
+                latencyDelay: parseInt(document.getElementById('latencyDelay').value),
+                latencyInterval: parseInt(document.getElementById('latencyInterval').value),
+                latencyCount: parseInt(document.getElementById('latencyCount').value)
+            };
+            localStorage.setItem('experimentParams', JSON.stringify(params));
+            return params;
+        }
+
+        // Open modal
+        runBtn.onclick = function() {
+            loadLastParameters();
+            modal.classList.add('show');
+            document.getElementById('experimentStatus').classList.remove('success', 'error');
+            document.getElementById('experimentStatus').style.display = 'none';
+        };
+
+        // Close modal
+        function closeModal() {
+            modal.classList.remove('show');
+        }
+
+        closeBtn.onclick = closeModal;
+        cancelBtn.onclick = closeModal;
+
+        // Click outside modal to close
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+            if (event.target == schedulerModal) {
+                closeSchedulerModal();
+            }
+        };
+
+        // Add Scheduler modal handlers
+        function closeSchedulerModal() {
+            schedulerModal.classList.remove('show');
+        }
+
+        addSchedulerBtn.onclick = function() {
+            document.getElementById('schedulerName').value = '';
+            document.getElementById('schedulerValues').value = '';
+            document.getElementById('schedulerStatus').classList.remove('success', 'error');
+            document.getElementById('schedulerStatus').style.display = 'none';
+            schedulerModal.classList.add('show');
+        };
+
+        closeSchedulerBtn.onclick = closeSchedulerModal;
+        cancelSchedulerBtn.onclick = closeSchedulerModal;
+
+        // Save new scheduler
+        saveSchedulerBtn.onclick = async function() {
+            const name = document.getElementById('schedulerName').value.trim();
+            const valuesStr = document.getElementById('schedulerValues').value.trim();
+            const statusDiv = document.getElementById('schedulerStatus');
+
+            // Validate name
+            if (!name) {
+                statusDiv.textContent = 'Please enter a scheduler name';
+                statusDiv.className = 'experiment-status error';
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+                statusDiv.textContent = 'Name can only contain letters, numbers, and underscores';
+                statusDiv.className = 'experiment-status error';
+                return;
+            }
+
+            // Validate values
+            if (!valuesStr) {
+                statusDiv.textContent = 'Please enter RPS values';
+                statusDiv.className = 'experiment-status error';
+                return;
+            }
+
+            // Parse and validate numbers
+            const values = valuesStr.split(',').map(v => v.trim()).filter(v => v);
+            const numbers = [];
+            
+            for (const v of values) {
+                const num = parseInt(v);
+                if (isNaN(num) || num <= 0) {
+                    statusDiv.textContent = `Invalid number: "${v}". All values must be positive integers.`;
+                    statusDiv.className = 'experiment-status error';
+                    return;
+                }
+                numbers.push(num);
+            }
+
+            if (numbers.length === 0) {
+                statusDiv.textContent = 'Please enter at least one RPS value';
+                statusDiv.className = 'experiment-status error';
+                return;
+            }
+
+            // Save to backend
+            saveSchedulerBtn.disabled = true;
+            saveSchedulerBtn.textContent = 'Saving...';
+
+            try {
+                const response = await fetch('/api/schedules', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        values: numbers
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusDiv.textContent = 'Scheduler saved successfully!';
+                    statusDiv.className = 'experiment-status success';
+                    
+                    // Reload schedules and close modal
+                    await loadSchedules();
+                    setTimeout(() => {
+                        closeSchedulerModal();
+                    }, 1000);
+                } else {
+                    statusDiv.textContent = 'Error: ' + (result.error || 'Failed to save scheduler');
+                    statusDiv.className = 'experiment-status error';
+                }
+            } catch (error) {
+                statusDiv.textContent = 'Error: ' + error.message;
+                statusDiv.className = 'experiment-status error';
+            } finally {
+                saveSchedulerBtn.disabled = false;
+                saveSchedulerBtn.textContent = 'Save';
+            }
+        };
+
+        // Start experiment
+        startBtn.onclick = async function() {
+            const params = saveParameters();
+            const statusDiv = document.getElementById('experimentStatus');
+            
+            // Validate
+            if (!params.schedule) {
+                statusDiv.textContent = 'Please enter a schedule';
+                statusDiv.className = 'experiment-status error';
+                return;
+            }
+
+            // Disable button during request
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting...';
+
+            try {
+                const response = await fetch('/api/run-experiment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusDiv.textContent = 'Experiment started successfully!';
+                    statusDiv.className = 'experiment-status success';
+                    
+                    // Close modal after 1 second
+                    setTimeout(() => {
+                        closeModal();
+                        // Reload logs list to show new experiment when it appears
+                        loadLogs();
+                    }, 1000);
+                } else {
+                    statusDiv.textContent = 'Error: ' + (result.error || 'Failed to start experiment');
+                    statusDiv.className = 'experiment-status error';
+                }
+            } catch (error) {
+                statusDiv.textContent = 'Error: ' + error.message;
+                statusDiv.className = 'experiment-status error';
+            } finally {
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start';
+            }
+        };
+    </script>
+</body>
+</html>
