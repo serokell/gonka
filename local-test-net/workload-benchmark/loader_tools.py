@@ -3,6 +3,13 @@ import time
 from typing import Callable, Tuple
 import threading
 
+_max_workers = 500  # Default
+def set_thread_pool_size(size: int):
+    """Set the thread pool size (call before running tests)"""
+    global _max_workers
+    _max_workers = size
+    print(f"[POOL] Thread pool size set to: {_max_workers}")
+
 async def async_worker_burst(request_function: Callable, num_requests: int):
     """
     Fire all requests asynchronously in one burst.
@@ -26,75 +33,136 @@ def run_async_worker(request_function: Callable, requests_per_worker: int, worke
     """
     asyncio.run(async_worker_burst(request_function, requests_per_worker))
 
-
-def generate_load(request_function: Callable, requests_per_second: int, 
-                 duration_seconds: int, num_workers: int = 200, 
+def generate_load(request_function: Callable,  # Expects SYNC function  
+                 requests_per_second: int, 
+                 duration_seconds: int, 
+                 num_workers: int = 200, 
                  log_file: str = None) -> bool:
     """
-    Generate load using multiple workers, each running async requests.
+    Generate load using pure async - single event loop firing all requests.
     
     Args:
         request_function: Async function to call
         requests_per_second: Number of requests to fire per second
         duration_seconds: How long to generate load (in seconds)
-        num_workers: Number of worker threads (default: 200)
+        num_workers: Ignored (kept for API compatibility)
         log_file: Optional log file to write overload warnings
     
     Returns:
         bool: True if completed without overload, False if overloaded
     """
-    requests_per_worker = requests_per_second // num_workers
-    remainder = requests_per_second % num_workers
-    total_expected_requests = requests_per_second * duration_seconds
+    # Increase default thread pool size
+    import concurrent.futures
+    import asyncio
     
-    print(f"[LOAD] Starting hybrid async load generation:")
-    print(f"[LOAD]   Target rate: {requests_per_second:,} req/s for {duration_seconds}s")
-    print(f"[LOAD]   Expected total: {total_expected_requests:,} requests")
-    print(f"[LOAD]   Worker threads: {num_workers}")
-    print(f"[LOAD]   Requests per worker per second: {requests_per_worker}")
-    print("-" * 80)
+    # Create event loop with larger thread pool
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
+    # Set a large thread pool
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=_max_workers)
+    loop.set_default_executor(executor)
+    
+    try:
+        success = loop.run_until_complete(
+            _async_load_generation(request_function, requests_per_second, duration_seconds, log_file)
+        )
+    finally:
+        # Don't shut down executor - leave it for reuse
+        loop.close()
+    
+    return success
+
+async def _async_load_generation(request_function: Callable, 
+                                 requests_per_second: int,
+                                 duration_seconds: int,
+                                 log_file: str = None) -> bool:
+    """
+    Pure async load generation with detailed timing instrumentation.
+    """
     start_time = time.time()
     overloaded = False
-    progress_interval = max(10, duration_seconds // 10)  # Report every 10s or 10% of duration
+    progress_interval = max(10, duration_seconds // 10)
     
     # Open log file if provided
     log = open(log_file, 'a') if log_file else None
     
+    # Timing statistics
+    timing_stats = []
+    
     try:
+        loop = asyncio.get_running_loop()
         # For each second in the duration
         for second in range(duration_seconds):
             second_start = time.time()
             
-            # Start worker threads, each running async event loop
-            workers = []
-            for i in range(num_workers):
-                # First 'remainder' workers get one extra request
-                num_requests = requests_per_worker + (1 if i < remainder else 0)
-                
-                worker = threading.Thread(
-                    target=run_async_worker,
-                    args=(request_function, num_requests, i),
-                    daemon=True
-                )
-                worker.start()
-                workers.append(worker)
+            # Time task creation
+            task_creation_start = time.time()
+            tasks = [
+                loop.run_in_executor(None, request_function)  # None = default executor
+                for _ in range(requests_per_second)
+            ]
+            task_creation_time = time.time() - task_creation_start
             
-            # Wait for all workers to complete their async bursts
-            for worker in workers:
-                worker.join()
+            # Time gather
+            gather_start = time.time()
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            gather_time = time.time() - gather_start
             
-            # Calculate how long to sleep until next second
+            errors = []
+            successes = 0
+            for r in results:
+                if isinstance(r, Exception):
+                    errors.append(str(type(r).__name__) + ": " + str(r))
+                elif r is None:
+                    errors.append("None result")
+                else:
+                    successes += 1
+
+            error_count = len(errors)
+            
+            # Total time for this second
             elapsed = time.time() - second_start
             sleep_time = 1.0 - elapsed
             
+
+
+
+            # Log detailed timing
+            timing_data = {
+                'second': second + 1,
+                'task_creation_ms': task_creation_time * 1000,
+                'gather_ms': gather_time * 1000,
+                'total_ms': elapsed * 1000,
+                'sleep_ms': max(0, sleep_time * 1000),
+                'successes': successes,
+                'errors': error_count,
+                'overload': sleep_time <= 0
+            }
+            timing_stats.append(timing_data)
+            
+            # Log to file
+            if log:
+                log.write(f"[LOAD][TIMING] Second {second+1}: "
+                        f"TaskCreate={task_creation_time*1000:.1f}ms, "
+                        f"Gather={gather_time*1000:.1f}ms, "
+                        f"Total={elapsed*1000:.1f}ms, "
+                        f"Success={successes}/{requests_per_second}, "
+                        f"Errors={error_count}\n")
+                
+                # Log first few unique errors
+                if errors:
+                    unique_errors = list(set(errors))[:3]  # First 3 unique errors
+                    for err in unique_errors:
+                        log.write(f"[LOAD][ERROR] {err}\n")
+                
+                log.flush()
+            
             if sleep_time > 0:
-                time.sleep(sleep_time)
+                await asyncio.sleep(sleep_time)
             else:
-                warning_msg = f"[LOAD][WARNING] Second {second+1} overloaded, took {elapsed:.3f}s (slow coefficient = {elapsed:.3f})"
-                # Print to console
+                warning_msg = f"[LOAD][WARNING] Second {second+1} overloaded, took {elapsed:.3f}s (TaskCreate={task_creation_time*1000:.1f}ms, Gather={gather_time*1000:.1f}ms)"
                 print(warning_msg)
-                # Also log to file
                 if log:
                     log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {warning_msg}\n")
                     log.flush()
@@ -104,14 +172,38 @@ def generate_load(request_function: Callable, requests_per_second: int,
             if (second + 1) % progress_interval == 0 or (second + 1) == duration_seconds:
                 requests_so_far = (second + 1) * requests_per_second
                 elapsed_total = time.time() - start_time
+                
+                # Calculate average timings
+                recent_stats = timing_stats[-progress_interval:] if len(timing_stats) >= progress_interval else timing_stats
+                avg_task_create = sum(s['task_creation_ms'] for s in recent_stats) / len(recent_stats)
+                avg_gather = sum(s['gather_ms'] for s in recent_stats) / len(recent_stats)
+                avg_total = sum(s['total_ms'] for s in recent_stats) / len(recent_stats)
+                
                 print(f"[LOAD] Progress: {second+1}/{duration_seconds}s ({requests_so_far:,} requests fired, {elapsed_total:.1f}s elapsed)")
+                print(f"[LOAD]   Avg timing: TaskCreate={avg_task_create:.1f}ms, Gather={avg_gather:.1f}ms, Total={avg_total:.1f}ms")
         
         total_elapsed = time.time() - start_time
         
+        # Summary statistics
+        total_successes = sum(s['successes'] for s in timing_stats)
+        total_errors = sum(s['errors'] for s in timing_stats)
+        avg_task_create = sum(s['task_creation_ms'] for s in timing_stats) / len(timing_stats)
+        avg_gather = sum(s['gather_ms'] for s in timing_stats) / len(timing_stats)
+        max_task_create = max(s['task_creation_ms'] for s in timing_stats)
+        max_gather = max(s['gather_ms'] for s in timing_stats)
+        
         completion_msg = f"[LOAD] Completed in {total_elapsed:.1f}s"
         print(completion_msg)
+        print(f"[LOAD] Total: {total_successes:,} successes, {total_errors:,} errors")
+        print(f"[LOAD] Timing breakdown:")
+        print(f"[LOAD]   Task creation - Avg: {avg_task_create:.1f}ms, Max: {max_task_create:.1f}ms")
+        print(f"[LOAD]   Gather wait   - Avg: {avg_gather:.1f}ms, Max: {max_gather:.1f}ms")
+        
         if log:
             log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {completion_msg}\n")
+            log.write(f"Total: {total_successes:,} successes, {total_errors:,} errors\n")
+            log.write(f"Timing - TaskCreate Avg={avg_task_create:.1f}ms Max={max_task_create:.1f}ms, "
+                     f"Gather Avg={avg_gather:.1f}ms Max={max_gather:.1f}ms\n")
         
         if overloaded:
             overload_msg = f"[LOAD] ⚠️  OVERLOAD DETECTED - System could not sustain {requests_per_second:,} req/s"
@@ -134,6 +226,9 @@ def generate_load(request_function: Callable, requests_per_second: int,
             log.close()
     
     return not overloaded
+
+
+
 
 def measure_latency(request_function: Callable, start_delay: int, 
                    measurement_interval: int, num_measurements: int, 
