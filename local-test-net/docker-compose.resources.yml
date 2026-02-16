@@ -1,0 +1,21 @@
+services:
+  chain-node:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 8G
+
+  api:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+
+  mock-server:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
