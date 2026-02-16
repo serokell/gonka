@@ -1,3 +1,6 @@
+"""
+Log Viewer Routes - Add these to your existing Flask application
+"""
 from flask import render_template, jsonify, request
 from pathlib import Path
 import re
@@ -31,24 +34,29 @@ def parse_log_file(filepath):
         # This regex captures the metrics block that appears after each step
         pattern = (
             r'\[LATENCY\] Measurement complete:\s*\n'
-            r'\s*RPS: (\d+)\s*\n'
-            r'\s*Successful measurements: \d+/\d+\s*\n'
-            r'\s*\n'
-            r'\s*SERVER/API LATENCY:\s*\n'
-            r'\s*Average:\s*([\d.]+)s.*?\n'
-            r'\s*Min:\s*([\d.]+)s.*?\n'
-            r'\s*Max:\s*([\d.]+)s.*?\n'
+            r'\s*RPS:\s*([\d,]+)\s*\n'  # Match numbers with commas like "1,000"
+            r'\s*Successful measurements:\s*\d+/\d+\s*\n'
             r'.*?'
-            r'\s*BLOCKCHAIN PROCESSING TIME \(until both confirmed\):\s*\n'
-            r'\s*Average:\s*([\d.]+)s.*?\n'
-            r'\s*Min:\s*([\d.]+)s.*?\n'
+            r'SERVER/API LATENCY:\s*\n'
+            r'\s*Average:\s*([\d.]+)s'
+            r'.*?'
+            r'\s*Min:\s*([\d.]+)s'
+            r'.*?'
+            r'\s*Max:\s*([\d.]+)s'
+            r'.*?'
+            r'BLOCKCHAIN PROCESSING TIME \(until both confirmed\):\s*\n'
+            r'\s*Average:\s*([\d.]+)s'
+            r'.*?'
+            r'\s*Min:\s*([\d.]+)s'
+            r'.*?'
             r'\s*Max:\s*([\d.]+)s'
         )
         
         measurement_blocks = re.finditer(pattern, content, re.DOTALL)
         
         for match in measurement_blocks:
-            rps = int(match.group(1))
+            rps_str = match.group(1).replace(',', '')  # Remove commas from RPS value
+            rps = int(rps_str)
             
             # Server/API Latency
             server_avg = float(match.group(2))
@@ -79,7 +87,7 @@ def parse_log_file(filepath):
 
 
 def register_log_viewer_routes(app):
-    """Register log viewer routes with Flask app"""
+    """Register log viewer routes with your Flask app"""
     
     @app.route('/logs')
     def logs_viewer():
@@ -95,7 +103,8 @@ def register_log_viewer_routes(app):
         logs = []
         for log_file in LOG_DIR.glob('experiment_*.log'):
             # Extract scheduler name and timestamp from filename
-            # Format: experiment_fibonacci_20260212_181434.log
+            # Format: experiment_fibonacci_long_2_20260215_181434.log
+            # Scheduler names can contain letters, numbers, and underscores
             match = re.match(r'experiment_([a-zA-Z0-9_]+)_(\d{8}_\d{6})\.log', log_file.name)
             if match:
                 scheduler = match.group(1)
