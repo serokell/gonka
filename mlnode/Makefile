@@ -91,7 +91,7 @@ tests: unit-tests integration-tests unit-tests-gpu
 
 
 build-release:
-	docker build \
+	docker buildx build \
 		-t $(IMAGE_NAME) \
 		-f packages/api/Dockerfile \
 		--target app \

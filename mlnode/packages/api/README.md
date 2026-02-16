@@ -22,7 +22,7 @@ ZERO_BAND_LOG_ALL_RANK=true
 
 ```
 source .env
-docker build $PROJECT_ROOT/ -t comb-test -f $PROJECT_ROOT/packages/api/Dockerfile
+docker buildx build $PROJECT_ROOT/ -t comb-test -f $PROJECT_ROOT/packages/api/Dockerfile
 ```
 
 4. Run server and then tests

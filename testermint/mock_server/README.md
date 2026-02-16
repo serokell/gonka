@@ -39,7 +39,7 @@ A Dockerfile is provided in the root directory of the project. To build and run 
 1. Build the Docker image:
 
 ```bash
-docker build -t inference-mock-server .
+docker buildx build -t inference-mock-server .
 ```
 
 2. Run the Docker container:

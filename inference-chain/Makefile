@@ -284,7 +284,7 @@ build-%:
 			go build -ldflags "$(ldflags) -extldflags '-static'" -tags "muslc" -o build/$(OS)/$(ARCH)/inferenced ./cmd/inferenced/main.go; \
 		fi; \
 	else \
-		echo "Cross-compilation for $(OS)/$(ARCH) requires Docker build..."; \
+		echo "Cross-compilation for $(OS)/$(ARCH) requires docker buildx build..."; \
 		echo "Use 'make build-all-docker' for cross-compilation"; \
 		mkdir -p build/$(OS)/$(ARCH) && touch build/$(OS)/$(ARCH)/.skipped; \
 	fi
