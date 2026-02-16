@@ -76,11 +76,17 @@ PROPOSAL_JSON="$(echo "$CURRENT_PARAMS" | jq '{
   metadata: ""
 }')"
 
-# Write proposal to a temp file inside genesis home so the container can access it
-echo "$PROPOSAL_JSON" > "$GENESIS_HOME/proposal.json"
+# Write proposal locally and docker cp it into the genesis container
+PROPOSAL_FILE="./proposal.json"
+echo "$PROPOSAL_JSON" > "$PROPOSAL_FILE"
+
+GENESIS_CONTAINER="genesis-node"
+CONTAINER_PROPOSAL_PATH="/tmp/proposal.json"
+docker cp "$PROPOSAL_FILE" "$GENESIS_CONTAINER:$CONTAINER_PROPOSAL_PATH"
+rm -f "$PROPOSAL_FILE"
 
 echo "=== Submitting proposal from genesis ==="
-TX_HASH="$(run_genesis tx gov submit-proposal /root/.inference/proposal.json \
+TX_HASH="$(run_genesis tx gov submit-proposal "$CONTAINER_PROPOSAL_PATH" \
   --from genesis \
   --chain-id "$CHAIN_ID" \
   --node "$NODE_URL" \
@@ -128,7 +134,7 @@ run_genesis query gov proposal "$PROPOSAL_ID" -o json --node "$NODE_URL" \
   | jq '{id: .proposal.id, status: .proposal.status, voting_end_time: .proposal.voting_end_time}'
 
 # Cleanup
-rm -f "$GENESIS_HOME/proposal.json"
+rm -f "$PROPOSAL_FILE"
 
 echo "=== Done! Proposal $PROPOSAL_ID submitted and votes cast. ==="
 echo "=== Wait for voting_end_time for the proposal to pass. ==="
