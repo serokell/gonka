@@ -1,0 +1,17 @@
+services:
+  chain-node:
+    ports:
+      - "${RPC_PORT:-26657}:26657"  # RPC
+      - "${P2P_PORT:-26656}:26656"  # P2P
+
+  api:
+    ports:
+      - "${PUBLIC_SERVER_PORT}:9000"
+      - "${ML_SERVER_PORT}:9100"
+      - "${ADMIN_SERVER_PORT}:9200"
+      - "${ML_GRPC_SERVER_PORT}:9300"
+      - "${NATS_SERVER_PORT}:4222"
+
+  mock-server:
+    ports:
+      - "${WIREMOCK_PORT}:8080"

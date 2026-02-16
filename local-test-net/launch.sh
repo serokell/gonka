@@ -34,7 +34,7 @@ export IMPORT_KEYS_DIR=./genesis-keys
 export MONEYBAG_KEYS_DIR=./moneybag-keys
 
 echo "Starting genesis node"
-docker compose -p genesis -f docker-compose-base.yml -f docker-compose.genesis.yml -f docker-compose.proxy.yml -f docker-compose.explorer.yml up -d
+docker compose -p genesis -f docker-compose-base.yml -f docker-compose.ports.yml -f docker-compose.genesis.yml -f docker-compose.proxy.yml -f docker-compose.explorer.yml up -d
 sleep 40
 
 # seed node parameters for both joining nodes
