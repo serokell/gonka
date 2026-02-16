@@ -7,7 +7,7 @@ SET_LATEST ?= 0
 SET_LATEST := $(shell if [ "$(SET_LATEST)" = "1" ]; then echo 1; else echo 0; fi)
 
 build-with-keygen:
-	docker build \
+	docker buildx build \
 		--platform $(PLATFORM) \
 		-f ./docker/Dockerfile_keygen \
 		--build-arg TMKMS_TOML=./template/tmkms.toml \
@@ -15,7 +15,7 @@ build-with-keygen:
 		.
 
 build-with-import:
-	docker build \
+	docker buildx build \
 		--platform $(PLATFORM) \
 		-f ./docker/Dockerfile_import_keys \
 		--build-arg TMKMS_TOML=./template/tmkms.toml \

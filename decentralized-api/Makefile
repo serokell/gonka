@@ -24,7 +24,7 @@ define DOCKER_BUILD
 	@echo "    	GOOS: $(GOOS)"
 	@echo "    	GOARCH: $(GOARCH)"
 	@DOCKER_BUILDKIT=1 \
-	docker build \
+	docker buildx build \
 		--load \
 		--platform $(PLATFORM) \
 		--build-arg BUILD_FLAGS="$(BUILD_FLAGS)" \
@@ -42,7 +42,7 @@ define DOCKER_BUILD_UPGRADE
 	@echo "    	BUILD_FLAGS: $(BUILD_FLAGS)"
 	@echo "    	GOOS: $(GOOS)"
 	@echo "    	GOARCH: $(GOARCH)"
-	@docker build \
+	@docker buildx build \
 		--platform $(PLATFORM) \
 		--build-arg BUILD_FLAGS="$(BUILD_FLAGS)" \
 		--build-arg GOOS=$(GOOS) \

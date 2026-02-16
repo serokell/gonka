@@ -47,7 +47,7 @@ If you need to build the vLLM's fork image, you can do it with the following com
 
 ```bash
 DOCKER_BUILDKIT=1 \
-docker build . --target vllm-openai \
+docker buildx build . --target vllm-openai \
 --tag gcr.io/decentralized-ai/vllm:<VLLM_VERSION>  \
 --build-arg max_jobs=24 \
 --build-arg nvcc_threads=12 \
@@ -71,7 +71,7 @@ Current latest version of vLLM's fork can be found in `productscience/dev` branc
 
 ```bash
 DOCKER_BUILDKIT=1 \
-docker build . --target app --tag gcr.io/decentralized-ai/inference-runner:<VERSION>
+docker buildx build . --target app --tag gcr.io/decentralized-ai/inference-runner:<VERSION>
 ```
 
 And push it to GCP:

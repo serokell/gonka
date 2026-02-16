@@ -8,7 +8,7 @@ PLATFORMS ?= linux/amd64,linux/arm64
 define DOCKER_BUILD
 	@echo "--> building proxy docker image"
 	@echo "    	platform: $(PLATFORM)"
-	@docker build \
+	@docker buildx build \
 		--platform $(PLATFORM) \
 		-f $(DOCKER_FILE) \
 		. \

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-# Copy file from TEMPLATE_DIR (used at docker build stage for initializing tmkms)
+# Copy file from TEMPLATE_DIR (used at docker buildx build stage for initializing tmkms)
 #   to TARGET_DIR (where we mount the volume)
 TEMPLATE_DIR="/app/tmkms_init_data"
 TARGET_DIR="/root/.tmkms"

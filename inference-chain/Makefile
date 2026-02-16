@@ -81,7 +81,7 @@ define DOCKER_BUILD
 	@rm -rf .docker-context/inference-chain/.docker-context
 	@mkdir -p .docker-context/cosmovisor && cp -r ../cosmovisor/* .docker-context/cosmovisor/
 	@DOCKER_BUILDKIT=1 \
-	docker build \
+	docker buildx build \
 		--load \
 		--platform $(PLATFORM) \
 		--build-arg LDFLAGS='$(ldflags)' \
@@ -110,7 +110,7 @@ define DOCKER_BUILD_UPGRADE
 	@rm -rf .docker-context/inference-chain/.docker-context
 	@mkdir -p .docker-context/cosmovisor && cp -r ../cosmovisor/* .docker-context/cosmovisor/
 	@DOCKER_BUILDKIT=1 \
-	docker build \
+	docker buildx build \
 		--platform $(PLATFORM) \
 		--build-arg LDFLAGS='$(ldflags)' \
 		--build-arg GOOS=$(GOOS) \
@@ -274,7 +274,7 @@ build-%:
 			go build -ldflags "$(ldflags) -extldflags '-static'" -tags "muslc" -o build/$(OS)/$(ARCH)/inferenced ./cmd/inferenced/main.go; \
 		fi; \
 	else \
-		echo "Cross-compilation for $(OS)/$(ARCH) requires Docker build..."; \
+		echo "Cross-compilation for $(OS)/$(ARCH) requires docker buildx build..."; \
 		echo "Use 'make build-all-docker' for cross-compilation"; \
 		mkdir -p build/$(OS)/$(ARCH) && touch build/$(OS)/$(ARCH)/.skipped; \
 	fi

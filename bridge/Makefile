@@ -7,7 +7,7 @@ SET_LATEST := $(shell if [ "$(SET_LATEST)" = "1" ]; then echo 1; else echo 0; fi
 define DOCKER_BUILD
 	@echo "--> building bridge docker image"
 	@echo "    platform: $(PLATFORM)"
-	@docker build \
+	@docker buildx build \
 		--platform $(PLATFORM) \
 		-f $(DOCKER_FILE) \
 		. \
