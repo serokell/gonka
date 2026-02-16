@@ -14,7 +14,7 @@ echo "=== Node API endpoints ==="
 endpoints=""
 for i in $(seq 1 "$NUM_JOIN_NODES"); do
   warm_address="$(cat "./node-keys/join${i}-keys/warm_address.txt")"
-  entry="http://join${i}-api:9000;${warm_address}"
+  entry="http://join${i}-api:9000/v1;${warm_address}"
   if [ -z "$endpoints" ]; then
     endpoints="$entry"
   else
