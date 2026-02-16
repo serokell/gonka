@@ -61,7 +61,7 @@ fi
 
 
 # Build compose command with conditional services support
-COMPOSE_FILES="-f docker-compose-base.yml -f docker-compose.join.yml"
+COMPOSE_FILES="-f docker-compose-base.yml -f docker-compose.ports.yml -f docker-compose.join.yml"
 if [ "${PROXY_ACTIVE}" = "true" ]; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.proxy.yml"
   echo "Starting with proxy support"

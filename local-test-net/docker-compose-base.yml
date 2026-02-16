@@ -16,9 +16,6 @@ services:
       - DEBUG=false
       - IS_TEST_NET=true
       - IMPORT_KEYS_DIR=/keys
-    ports:
-      - "${RPC_PORT:-26657}:26657"  # RPC
-      - "${P2P_PORT:-26656}:26656"  # P2P
     networks:
       - chain-public
 
@@ -98,8 +95,6 @@ services:
       dockerfile: Dockerfile
     environment:
       - KEY_NAME=${KEY_NAME}
-    ports:
-      - "${WIREMOCK_PORT}:8080"
     networks:
       - chain-public
 
