@@ -1,5 +1,6 @@
 #!/bin/bash
-# Submit a governance proposal to change epoch params and vote on it from all 3 nodes.
+# Submit a governance proposal to change epoch params and vote on it from all nodes.
+# Discovers join nodes automatically from prod-local/ directories.
 # Usage: ./propose-large-epoch.sh [epoch_length]
 set -e
 
@@ -9,28 +10,26 @@ IMAGE="ghcr.io/product-science/inferenced"
 NETWORK="chain-public"
 DEPOSIT="25000000ngonka"
 
-# Node home directories (mounted inside container as /root/.inference)
 GENESIS_HOME="$(pwd)/prod-local/genesis"
-JOIN1_HOME="$(pwd)/prod-local/join1"
-JOIN2_HOME="$(pwd)/prod-local/join2"
 
-# Helper: run inferenced command against genesis node RPC
+# Discover join node directories
+JOIN_NODES=()
+for dir in prod-local/join*/; do
+  [ -d "$dir" ] || continue
+  JOIN_NODES+=("$(basename "$dir")")
+done
+
+# Helper: run inferenced command with a given node's home directory
+run_node() {
+  local home_dir="$1"
+  shift
+  docker run --rm --network "$NETWORK" \
+    -v "$home_dir:/root/.inference" \
+    "$IMAGE" inferenced "$@"
+}
+
 run_genesis() {
-  docker run --rm --network "$NETWORK" \
-    -v "$GENESIS_HOME:/root/.inference" \
-    "$IMAGE" inferenced "$@"
-}
-
-run_join1() {
-  docker run --rm --network "$NETWORK" \
-    -v "$JOIN1_HOME:/root/.inference" \
-    "$IMAGE" inferenced "$@"
-}
-
-run_join2() {
-  docker run --rm --network "$NETWORK" \
-    -v "$JOIN2_HOME:/root/.inference" \
-    "$IMAGE" inferenced "$@"
+  run_node "$GENESIS_HOME" "$@"
 }
 
 NODE_URL="http://genesis-node:26657"
@@ -98,7 +97,7 @@ PROPOSAL_ID="$(run_genesis query tx "$TX_HASH" -o json --node "$NODE_URL" \
 
 echo "=== Proposal ID: $PROPOSAL_ID ==="
 
-# 2. Vote from all three nodes
+# 2. Vote from all nodes
 echo "=== Voting YES from genesis ==="
 run_genesis tx gov vote "$PROPOSAL_ID" yes \
   --from genesis \
@@ -107,21 +106,15 @@ run_genesis tx gov vote "$PROPOSAL_ID" yes \
   --keyring-backend test \
   --yes
 
-echo "=== Voting YES from join1 ==="
-run_join1 tx gov vote "$PROPOSAL_ID" yes \
-  --from join1_warm \
-  --chain-id "$CHAIN_ID" \
-  --node "$NODE_URL" \
-  --keyring-backend test \
-  --yes
-
-echo "=== Voting YES from join2 ==="
-run_join2 tx gov vote "$PROPOSAL_ID" yes \
-  --from join2_warm \
-  --chain-id "$CHAIN_ID" \
-  --node "$NODE_URL" \
-  --keyring-backend test \
-  --yes
+for node_name in "${JOIN_NODES[@]}"; do
+  echo "=== Voting YES from $node_name ==="
+  run_node "$(pwd)/prod-local/$node_name" tx gov vote "$PROPOSAL_ID" yes \
+    --from "${node_name}_warm" \
+    --chain-id "$CHAIN_ID" \
+    --node "$NODE_URL" \
+    --keyring-backend test \
+    --yes
+done
 
 echo "=== Waiting for votes to be included ==="
 sleep 6
