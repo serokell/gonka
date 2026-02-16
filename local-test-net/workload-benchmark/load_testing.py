@@ -13,69 +13,13 @@ import asyncio
 import time
 import argparse
 import blockchain_monitor
+import gonkaAPI_pool
+import atexit
 
 # Configure logging once
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpx").propagate = False
 logging.getLogger().setLevel(logging.WARNING)
-
-# Global devnull for suppression
-_devnull = open(os.devnull, 'w')
-
-class SuppressPrints:
-    """Thread-safe stdout suppression"""
-    def __enter__(self):
-        self._original = sys.stdout
-        sys.stdout = _devnull
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout = self._original
-
-
-def make_gonka_request_sync_suppressed():
-    """For load generation - fully suppressed"""
-    try:
-        with SuppressPrints():
-            client = GonkaOpenAI()
-            response = client.chat.completions.create(
-                model="Qwen/Qwen2.5-7B-Instruct",
-                messages=[
-                    {"role": "user", "content": "Write a one-sentence bedtime story about a unicorn"}
-                ]
-            )
-        return response.choices[0].message.content
-    except Exception as e:
-        return None
-
-
-async def make_gonka_request_async():
-    """For load generation"""
-    try:
-        result = await asyncio.to_thread(make_gonka_request_sync_suppressed)
-        return result
-    except Exception as e:
-        return None
-
-
-def make_gonka_request_sync_verbose():
-    """
-    For latency measurement - returns full response object for blockchain tracking.
-    """
-    try:
-        with SuppressPrints():
-            client = GonkaOpenAI()
-            response = client.chat.completions.create(
-                model="Qwen/Qwen2.5-7B-Instruct",
-                messages=[
-                    {"role": "user", "content": "Write a one-sentence bedtime story about a unicorn"}
-                ]
-            )
-        return response  # Return full response object, not just content
-    except Exception as e:
-        print(f"[ERROR] {e}")
-        return None
-
 
 def load_schedules(filename="schedules.json"):
     """Load experiment schedules from JSON file"""
@@ -115,6 +59,18 @@ def run_scheduled_experiment(schedule_name: str,
         return
     
     schedule = schedules[schedule_name]
+
+    # AUTO-CALCULATE OPTIMAL SETTINGS
+    max_rps = max(schedule)
+    optimal_workers = max_rps * 2
+    optimal_pool_size = optimal_workers
+     # Update global settings
+    import gonkaAPI_pool
+    gonkaAPI_pool.set_pool_size(optimal_pool_size)
+    # Set loader settings
+    loader_tools.set_thread_pool_size(optimal_workers)
+
+
     
     # Generate log filename ONCE for the entire experiment
     timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -127,8 +83,10 @@ def run_scheduled_experiment(schedule_name: str,
     print("=" * 80)
     print(f"Schedule: {schedule}")
     print(f"Total steps: {len(schedule)}")
+    print(f"Max RPS: {max_rps:,}")
+    print(f"Auto-configured thread pool: {optimal_workers:,} workers")
+    print(f"Auto-configured client pool: {optimal_pool_size:,} clients")
     print(f"Duration per step: {load_duration}s")
-    print(f"Workers: {num_workers}")
     print(f"Latency delay: {latency_start_delay}s")
     print(f"Latency interval: {latency_interval}s")
     print(f"Latency measurements: {latency_measurements}")
@@ -147,8 +105,10 @@ def run_scheduled_experiment(schedule_name: str,
         log.write(f"  Schedule name:         {schedule_name}\n")
         log.write(f"  Schedule values:       {schedule}\n")
         log.write(f"  Total steps:           {len(schedule)}\n")
+        log.write(f"  Max RPS:               {max_rps:,}\n")
+        log.write(f"  Thread pool workers:   {optimal_workers:,} (auto: 2x max RPS)\n")
+        log.write(f"  Client pool size:      {optimal_pool_size:,} (auto: matches workers)\n")
         log.write(f"  Duration per step:     {load_duration}s\n")
-        log.write(f"  Worker threads:        {num_workers}\n")
         log.write(f"  Latency delay:         {latency_start_delay}s (wait before measuring)\n")
         log.write(f"  Latency interval:      {latency_interval}s (between measurements)\n")
         log.write(f"  Latency measurements:  {latency_measurements} (per step)\n")
@@ -156,7 +116,7 @@ def run_scheduled_experiment(schedule_name: str,
         log.write(f"EXPLANATION:\n")
         log.write(f"  - Each step tests a specific RPS (requests per second) value\n")
         log.write(f"  - Load generation runs for {load_duration}s at each RPS level\n")
-        log.write(f"  - {num_workers} worker threads handle the load distribution\n")
+        log.write(f"  - Thread pool automatically sized to 2x max RPS for optimal performance\n")
         log.write(f"  - Latency measurements start after {latency_start_delay}s stabilization\n")
         log.write(f"  - {latency_measurements} measurements taken every {latency_interval}s during each test\n")
         log.write(f"  - Experiment stops if system overloads (cannot sustain target RPS)\n")
@@ -301,8 +261,8 @@ if __name__ == "__main__":
         
         results = run_scheduled_experiment(
             schedule_name=args.schedule,
-            async_request_function=make_gonka_request_async,
-            sync_request_function=make_gonka_request_sync_verbose,
+            async_request_function=gonkaAPI_pool.make_gonka_request_sync_suppressed,
+            sync_request_function=gonkaAPI_pool.make_gonka_request_sync_verbose,
             schedules_file="schedules.json",
             load_duration=args.duration,
             num_workers=args.workers,
