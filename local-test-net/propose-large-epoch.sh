@@ -86,7 +86,7 @@ docker cp "$PROPOSAL_FILE" "$GENESIS_CONTAINER:$CONTAINER_PROPOSAL_PATH"
 rm -f "$PROPOSAL_FILE"
 
 echo "=== Submitting proposal from genesis ==="
-TX_HASH="$(run_genesis tx gov submit-proposal "$CONTAINER_PROPOSAL_PATH" \
+TX_HASH="$(docker exec "$GENESIS_CONTAINER" inferenced tx gov submit-proposal "$CONTAINER_PROPOSAL_PATH" \
   --from genesis \
   --chain-id "$CHAIN_ID" \
   --node "$NODE_URL" \
