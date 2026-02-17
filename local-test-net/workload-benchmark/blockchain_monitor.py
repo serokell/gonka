@@ -58,7 +58,7 @@ class BlockchainMonitor:
             self.thread.join(timeout=5)
         self._log("[BLOCKCHAIN] Monitor stopped")
     
-    def get_event_times(self, inference_id, timeout=30):
+    def get_event_times(self, inference_id, timeout=60):
         """
         Get blockchain event times for an inference_id.
         Waits up to timeout seconds for BOTH events to appear.
@@ -85,13 +85,10 @@ class BlockchainMonitor:
             time.sleep(0.1)
         
         # Timeout - return whatever we have
+        timeout_time = start_wait + timeout
+        
         with self.lock:
-            events = self.inference_events.get(inference_id, {
-                'start_time': None,
-                'finish_time': None,
-                'start_height': None,
-                'finish_height': None
-            })
+            events = self.inference_events.get(inference_id, {})
             
             if is_tracked:
                 if events.get('start_time') or events.get('finish_time'):
@@ -99,7 +96,14 @@ class BlockchainMonitor:
                 else:
                     self._log(f"[BLOCKCHAIN] Timeout - no events found for {inference_id[:50]}")
             
-            return events
+            return {
+                'start_time': events.get('start_time', timeout_time),
+                'finish_time': events.get('finish_time', timeout_time),
+                'start_height': events.get('start_height', 0),
+                'finish_height': events.get('finish_height', 0),
+                'timed_out': True,
+                'partial': bool(events.get('start_time') or events.get('finish_time'))
+            }
     
     def _fetch_json(self, url, timeout=10):
         """Fetch JSON from URL with retries"""

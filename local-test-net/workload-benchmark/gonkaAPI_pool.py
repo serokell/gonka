@@ -59,27 +59,35 @@ def return_client(client):
 
 def make_gonka_request_sync_suppressed():
     """For load generation - fully suppressed, with client reuse"""
-    client = None
-    try:
-        client = get_client()
+    MAX_RETRIES = 3
+    
+    for attempt in range(MAX_RETRIES):
+        client = None
+        try:
+            client = get_client()
+            
+            with SuppressPrints():
+                response = client.chat.completions.create(
+                    model="Qwen/Qwen2.5-7B-Instruct",
+                    messages=[
+                        {"role": "user", "content": "Write a one-sentence bedtime story about a unicorn"}
+                    ]
+                )
+            
+            result = response.choices[0].message.content
+            return_client(client)
+            return result
         
-        with SuppressPrints():
-            response = client.chat.completions.create(
-                model="Qwen/Qwen2.5-7B-Instruct",
-                messages=[
-                    {"role": "user", "content": "Write a one-sentence bedtime story about a unicorn"}
-                ]
-            )
-        
-        result = response.choices[0].message.content
-        return_client(client)  # Return to pool
-        return result
-        
-    except Exception as e:
-        # Don't return client to pool if there was an error
-        # Log the actual error instead of silently returning None
-        print(f"[ERROR] Request failed: {type(e).__name__}: {e}")
-        raise  # Re-raise instead of returning None
+        except Exception as e:
+            if 'signature is in the future' in str(e):
+                # Discard this client (bad signature), immediately retry with fresh one
+                # No sleep - fresh client will have a new timestamp
+                continue
+            
+            # Any other error - raise immediately
+            raise
+    
+    raise RuntimeError("Max retries exceeded for clock skew error")
 
 def make_gonka_request_sync_verbose():
     """
