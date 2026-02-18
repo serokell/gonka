@@ -4,6 +4,8 @@ cd ..
 ./generate-node-keys.sh join1-keys
 ./generate-node-keys.sh join2-keys
 
-./launch_benchmark_env.sh 3
-./propose-large-epoch.sh
+NUM_JOIN_NODES="${1:-3}"
+echo "Using $NUM_JOIN_NODES nodes."
+./launch_benchmark_env.sh "$NUM_JOIN_NODES"
+
 cd workload-benchmark
