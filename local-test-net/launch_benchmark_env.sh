@@ -21,4 +21,5 @@ for i in $(seq 1 "$NUM_JOIN_NODES"); do
     endpoints="${endpoints},${entry}"
   fi
 done
+echo "=========================== GONKA ENDPOINTS =============================="
 echo "$endpoints"
