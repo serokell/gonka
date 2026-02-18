@@ -38,7 +38,7 @@ Just below that line, you will a list of endpoint that looks something like
 http://join1-api:9000/v1;gonka1zf6w28urkzd8zvffxv8frknng2jrd....
 ```
 
-Copy that and defined the GONKA_ENDPOINTS env variable using it
+Copy that and define the GONKA_ENDPOINTS env variable using it
 
 ```
 export GONKA_ENDPOINTS="http://join1-api:9000/v1;..."
@@ -53,7 +53,7 @@ export GONKA_ENDPOINTS="http://join1-api:9000/v1;..."
 ### Start the benchmark
 
 At this point, you should be able to access the benchmark interface at local port `5001`.
-Proceed to ssh to the benchmark container,
+Proceed to log in to the benchmark container,
 
 ```
 docker exec -it workload-benchmark-server /bin/bash
