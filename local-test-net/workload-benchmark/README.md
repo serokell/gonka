@@ -26,6 +26,24 @@ docker load -i proxy.tar.gz
 
 This will start a local blockchain with 3 hosts. Wait till it finishes.
 
+Look for the following line in the output
+
+```
+=========================== GONKA ENDPOINTS ==============================
+```
+
+Just below that line, you will a list of endpoint that looks something like
+
+```
+http://join1-api:9000/v1;gonka1zf6w28urkzd8zvffxv8frknng2jrd....
+```
+
+Copy that and defined the GONKA_ENDPOINTS env variable using it
+
+```
+export GONKA_ENDPOINTS="http://join1-api:9000/v1;..."
+```
+
 ### Start the benchmarking container
 
 ```
