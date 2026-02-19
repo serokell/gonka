@@ -1,21 +1,15 @@
 ## Benchmarks for Gonka local test network
 
-This describes the procedure the run benchmarks on a container network with
+This describes the procedure to run benchmarks on a container network with
 the specified number of hosts, each running an API, Blockchain and a mock ML node.
 
 ### Creating the environment
 
-Download the required docker images from,
-
-https://github.com/gonka-ai/gonka/actions/runs/21810732149/artifacts/5426499945
-
-After unzipping, load the images one by one
+You need to have Docker, Java and Gradle to build the docker images. Once you have those, run
 
 ```
-docker load -i inference-mock-server.tar.gz
-docker load -i decentralized-api.tar.gz
-docker load -i inference-chain.tar.gz
-docker load -i proxy.tar.gz
+cd local-test-net
+./stop-rebuild.sh
 ```
 
 ### Start the local cluster
@@ -32,13 +26,13 @@ Look for the following line in the output
 =========================== GONKA ENDPOINTS ==============================
 ```
 
-Just below that line, you will a list of endpoint that looks something like
+Just below that line, you will see a list of endpoint that looks something like,
 
 ```
 http://join1-api:9000/v1;gonka1zf6w28urkzd8zvffxv8frknng2jrd....
 ```
 
-Copy that and define the GONKA_ENDPOINTS env variable using it
+Copy that and use it to define the `GONKA_ENDPOINTS` environment variable.
 
 ```
 export GONKA_ENDPOINTS="http://join1-api:9000/v1;..."
@@ -46,6 +40,7 @@ export GONKA_ENDPOINTS="http://join1-api:9000/v1;..."
 
 ### Start the benchmarking container
 
+Run the following in the same terminal session.
 ```
 ./loadserver_rebuild_and_run.sh
 ```
