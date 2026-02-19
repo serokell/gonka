@@ -1,7 +1,7 @@
 ## Benchmarks for Gonka local test network
 
 This describes the procedure to run benchmarks on a container network with
-the specified number of hosts, each running an API, Blockchain and a mock ML node.
+the specified number of hosts, each running an API, blockchain node and a mock ML node.
 
 ### Creating the environment
 
@@ -16,11 +16,18 @@ cd local-test-net
 
 * Checkout [serokell/sras/readme-with-patches](https://github.com/serokell/gonka/tree/sras/readme-with-patches).
 * Change directory to `local-test-net/workload-benchmark`
-* Run `./chain_restart.sh`
+* Run `./chain_restart.sh 3`
+
 
 This will start a local blockchain with 3 hosts. Wait till it finishes.
 
-Look for the following line in the output
+To limit resources used by the containers you can optionally also set
+
+```
+export RESOURCE_LIMITS=true
+```
+
+After the script has finished, look for the following line in the output,
 
 ```
 =========================== GONKA ENDPOINTS ==============================
