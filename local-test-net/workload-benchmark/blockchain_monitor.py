@@ -112,6 +112,7 @@ class BlockchainMonitor:
                     return json.loads(response.read().decode())
             except Exception as e:
                 self._log(f"Error fetching {url}: {e}, retrying...")
+                time.sleep(0.1)
                 pass
 
     def _fetch_json_bak(self, url, timeout=10):
