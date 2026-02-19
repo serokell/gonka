@@ -14,11 +14,13 @@ cd local-test-net
 
 ### Start the local cluster
 
-* Checkout [serokell/sras/readme-with-patches](https://github.com/serokell/gonka/tree/sras/readme-with-patches).
-* Change directory to `local-test-net/workload-benchmark`
-* Run `./chain_restart.sh 3`
+```
+cd workload-benchmark`
+./chain_restart.sh 3
+```
 
-This will start a local blockchain with 3 hosts.
+This will start a local blockchain with 3 hosts, if you need to have more hosts
+change the argument to `chain_restart` accordingly.
 
 To limit resources used by the containers you can optionally also set
 
@@ -76,11 +78,3 @@ entry to start seeing the plots that will be updated realtime.
 ### Stopping and removing the containers
 
 Change directory to `/local-test-net` and run `./stop.sh`
-
-### Configuring the number of hosts
-
-Edit the `chain_restart.sh` script where it says 3 to the required number of hosts.
-
-```
-./launch_benchmark_env.sh 3
-```
