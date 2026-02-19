@@ -18,8 +18,7 @@ cd local-test-net
 * Change directory to `local-test-net/workload-benchmark`
 * Run `./chain_restart.sh 3`
 
-
-This will start a local blockchain with 3 hosts. Wait till it finishes.
+This will start a local blockchain with 3 hosts.
 
 To limit resources used by the containers you can optionally also set
 
