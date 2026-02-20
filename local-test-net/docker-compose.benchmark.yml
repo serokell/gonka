@@ -1,0 +1,7 @@
+services:
+  chain-node:
+    image: ghcr.io/product-science/inferenced
+    volumes:
+      - ${IMPORT_KEYS_DIR}:/keys
+    environment:
+      - IMPORT_KEYS_DIR=/keys

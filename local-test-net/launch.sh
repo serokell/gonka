@@ -29,12 +29,8 @@ if [ -n "$(ls -A ./public-html 2>/dev/null)" ]; then
   cp -r ../public-html/* "./prod-local/wiremock-2/$KEY_NAME/__files/"
 fi
 
-export DASHBOARD_PORT=5173
-export IMPORT_KEYS_DIR=./genesis-keys
-export MONEYBAG_KEYS_DIR=./moneybag-keys
-
 echo "Starting genesis node"
-docker compose -p genesis -f docker-compose-base.yml -f docker-compose.ports.yml -f docker-compose.genesis.yml -f docker-compose.proxy.yml -f docker-compose.explorer.yml up -d
+docker compose -p genesis -f docker-compose-base.yml -f docker-compose.ports.yml -f docker-compose.genesis.yml up -d
 sleep 40
 
 # seed node parameters for both joining nodes
@@ -55,10 +51,9 @@ export NATS_SERVER_PORT=9014
 export WIREMOCK_PORT=8091
 export RPC_PORT=8101
 export P2P_PORT=8201
-export PUBLIC_URL="http://${KEY_NAME}-api:9000"
+export PUBLIC_URL="http://${KEY_NAME}-api:9010"
 export POC_CALLBACK_URL="http://${KEY_NAME}-api:9100"
 export P2P_EXTERNAL_ADDRESS="http://${KEY_NAME}-node:26656"
-export IMPORT_KEYS_DIR=./join1-keys
 ./launch_add_network_node.sh
 
 # join node 'join2'
@@ -72,8 +67,7 @@ export NATS_SERVER_PORT=9024
 export WIREMOCK_PORT=8092
 export RPC_PORT=8102
 export P2P_PORT=8202
-export PUBLIC_URL="http://${KEY_NAME}-api:9000"
+export PUBLIC_URL="http://${KEY_NAME}-api:9020"
 export POC_CALLBACK_URL="http://${KEY_NAME}-api:9100"
 export P2P_EXTERNAL_ADDRESS="http://${KEY_NAME}-node:26656"
-export IMPORT_KEYS_DIR=./join2-keys
 ./launch_add_network_node.sh

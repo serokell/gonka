@@ -167,26 +167,6 @@ echo "Adding the keys to the genesis account"
 $APP_NAME genesis add-genesis-account "$KEY_NAME" "2$NATIVE" --keyring-backend $KEYRING_BACKEND
 $APP_NAME genesis add-genesis-account "POOL_product_science_inc" "160$MILLION_NATIVE" --keyring-backend $KEYRING_BACKEND
 
-# Import moneybag keys and add them as genesis accounts
-if [ -d "${MONEYBAG_KEYS_DIR-}" ]; then
-  echo "Importing moneybag keys from $MONEYBAG_KEYS_DIR"
-  for hex_file in "$MONEYBAG_KEYS_DIR"/*.hex; do
-    [ -f "$hex_file" ] || continue
-    key_base="$(basename "$hex_file" .hex)"
-    key_name="moneybag_${key_base}"
-
-    echo "Importing moneybag key: $key_name from $hex_file"
-    $APP_NAME keys import-hex "$key_name" "$(cat "$hex_file")" \
-      --keyring-backend "$KEYRING_BACKEND" --keyring-dir "$STATE_DIR"
-
-    addr="$($APP_NAME keys show "$key_name" --address \
-      --keyring-backend "$KEYRING_BACKEND" --keyring-dir "$STATE_DIR")"
-    echo "Adding genesis account for $key_name ($addr) with 1$MILLION_NATIVE"
-    $APP_NAME genesis add-genesis-account "$addr" "1$MILLION_NATIVE" \
-      --keyring-backend "$KEYRING_BACKEND"
-  done
-fi
-
 # Get the warm key address for ML operations
 WARM_KEY_ADDRESS=$($APP_NAME keys show "$KEY_NAME_WARM" --address --keyring-backend $KEYRING_BACKEND --keyring-dir "$STATE_DIR")
 
@@ -257,22 +237,6 @@ echo "Starting cosmovisor and the chain"
 cosmovisor run start &
 COSMOVISOR_PID=$!
 sleep 20 # wait for the first block
-
-# Publish moneybag public keys by sending a self-transaction
-if [ -d "${MONEYBAG_KEYS_DIR-}" ]; then
-  echo "Publishing moneybag public keys on-chain"
-  for hex_file in "$MONEYBAG_KEYS_DIR"/*.hex; do
-    [ -f "$hex_file" ] || continue
-    key_base="$(basename "$hex_file" .hex)"
-    key_name="moneybag_${key_base}"
-
-    addr=$($APP_NAME keys show "$key_name" --address \
-      --keyring-backend "$KEYRING_BACKEND" --keyring-dir "$STATE_DIR")
-    echo "Publishing public key for $key_name ($addr)"
-    $APP_NAME tx bank send "$addr" "$addr" "1${COIN_DENOM}" \
-      --from "$key_name" --yes
-  done
-fi
 
 # import private key for tgbot and sign tx to make tgbot public key registered n the network
 if [ "$INIT_TGBOT" = "true" ]; then

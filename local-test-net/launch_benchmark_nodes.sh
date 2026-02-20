@@ -42,7 +42,6 @@ export IS_GENESIS=true
 export DASHBOARD_PORT=5173
 export IMPORT_KEYS_DIR=./node-keys/genesis-keys
 ensure_node_keys "$IMPORT_KEYS_DIR"
-export MONEYBAG_KEYS_DIR=./moneybag-keys
 
 mkdir -p "./prod-local/wiremock/$KEY_NAME/mappings/"
 mkdir -p "./prod-local/wiremock/$KEY_NAME/__files/"
@@ -53,7 +52,9 @@ if [ -n "$(ls -A ./public-html 2>/dev/null)" ]; then
 fi
 
 echo "Starting genesis node"
-docker compose -p genesis -f docker-compose-base.yml $RESOURCES_FILE -f docker-compose.genesis.yml -f docker-compose.proxy.yml -f docker-compose.explorer.yml up -d
+docker compose -p genesis -f docker-compose-base.yml $RESOURCES_FILE \
+  -f docker-compose.genesis.yml -f docker-compose.proxy.yml \
+  -f docker-compose.explorer.yml  -f docker-compose.benchmark.yml up -d
 sleep 40
 
 # --- Join nodes ---
@@ -87,5 +88,5 @@ for i in $(seq 1 "$NUM_JOIN_NODES"); do
   fi
 
   echo "Starting join node '${KEY_NAME}'"
-  docker compose -p "$project_name" -f docker-compose-base.yml $RESOURCES_FILE -f docker-compose.join.yml up -d
+  docker compose -p "$project_name" -f docker-compose-base.yml $RESOURCES_FILE -f docker-compose.join.yml -f docker-compose.benchmark.yml up -d
 done
