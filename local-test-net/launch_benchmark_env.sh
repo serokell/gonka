@@ -22,3 +22,4 @@ for i in $(seq 1 "$NUM_JOIN_NODES"); do
   fi
 done
 echo "$endpoints"
+echo "$endpoints" > benchmark_endpoints.txt
