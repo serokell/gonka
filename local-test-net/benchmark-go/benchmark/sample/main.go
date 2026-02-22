@@ -224,7 +224,7 @@ func send_inference_req(private_key string) (InferenceId, error) {
 	return InferenceId(c.ID), nil
 }
 
-func generate_load(private_key string, rps int64, duration_in_sec int64) {
+func generate_load(private_key string, rps int64, duration_in_sec int64, counter_chan chan int64) {
 	var duration int64 = 1000000000 * duration_in_sec
 	var wg sync.WaitGroup
 	var i int64
@@ -232,8 +232,12 @@ func generate_load(private_key string, rps int64, duration_in_sec int64) {
 	outer_start := time.Now()
 	for i = 0; i < req_count; i++ {
 		wg.Add(1)
+    counter_chan <- 1
 		go func() {
-			defer wg.Done()
+			defer func() {
+        counter_chan <- -1
+        wg.Done()
+      }()
 			for {
 				_, err := send_inference_req(private_key)
 				if err != nil {
@@ -298,11 +302,11 @@ func observer_and_report(tx_notification_chan chan TxDecoded, inference_id_watch
 	}
 }
 
-func generate_load_for_rps(private_key string, set_rps_chan chan int64) {
+func generate_load_for_rps(private_key string, set_rps_chan chan int64, counter_chan chan int64) {
 	for {
 		rps := <-set_rps_chan
 		if rps > 0 {
-			generate_load(private_key, rps, 15)
+			generate_load(private_key, rps, 15, counter_chan)
 		}
 	}
 }
@@ -324,12 +328,22 @@ func main() {
 	go listen_for_txs(tx_notification_chan)
 
 	set_rps_chan := make(chan int64, 10)
-	go generate_load_for_rps(private_key, set_rps_chan)
+	counter_chan := make(chan int64, 10)
+  var counter int64 = 0
+  go func() {
+    for {
+    i := <- counter_chan
+    counter += i
+  }}()
+	go generate_load_for_rps(private_key, set_rps_chan, counter_chan)
 
 	var result []([]int64)
 
-	for _, rps := range []int64{3, 6, 9} {
-		//for _, rps := range []int64{30, 60, 90, 120, 150, 180} {
+  rpsList := make([]int64, 12)
+  for i := range rpsList {
+      rpsList[i] = (int64(i) + 1) * 30
+  }
+	for _, rps := range rpsList {
 
 		log.Printf("USING %d RPS\n", rps)
 		var timings []int64
@@ -350,7 +364,7 @@ func main() {
 				if err != nil {
 					log.Printf("Failed to send probe req %d: %s retrying...", i, err)
 				} else {
-					log.Printf("Sent probe %d: %s\n", i, probe_id)
+					log.Printf("Sent probe %d with %d pending requests: %s\n", i, counter, probe_id)
 					break
 				}
 			}
