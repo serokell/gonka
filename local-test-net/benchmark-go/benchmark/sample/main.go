@@ -224,12 +224,14 @@ func send_inference_req(private_key string) (InferenceId, error) {
 	return InferenceId(c.ID), nil
 }
 
-func generate_load(private_key string, rps int64, duration_in_sec int64, counter_chan chan int64) {
+func generate_load(private_key string, rps int64, duration_in_sec int64, counter_chan chan int64, break_load_gen chan bool) {
+  log.Printf("Generating load for %d RPS", rps)
 	var duration int64 = 1000000000 * duration_in_sec
 	var wg sync.WaitGroup
 	var i int64
 	var req_count = rps * duration_in_sec
 	outer_start := time.Now()
+  outerloop:
 	for i = 0; i < req_count; i++ {
 		wg.Add(1)
     counter_chan <- 1
@@ -246,8 +248,13 @@ func generate_load(private_key string, rps int64, duration_in_sec int64, counter
 				break
 			}
 		}()
+    select {
+    case <- break_load_gen:
+      break outerloop
+    default:
+    }
 		elapsed_time := time.Since(outer_start).Nanoseconds()
-		requests_to_go := rps - (i + 1)
+		requests_to_go := req_count - (i + 1)
 		if requests_to_go > 0 {
 			wait_time := (duration - elapsed_time) / requests_to_go
 			if wait_time > 0 {
@@ -255,8 +262,7 @@ func generate_load(private_key string, rps int64, duration_in_sec int64, counter
 			}
 		}
 	}
-	log.Printf("%d Threads created in %d milliseconds\n", req_count, time.Since(outer_start).Milliseconds())
-	wg.Wait()
+	log.Printf("%d Threads created in %d milliseconds for %d RPS\n", i, time.Since(outer_start).Milliseconds(), rps)
 }
 
 //   - Gets the inference ids to watch for over a channel and adds them to watched_inferences
@@ -302,11 +308,11 @@ func observer_and_report(tx_notification_chan chan TxDecoded, inference_id_watch
 	}
 }
 
-func generate_load_for_rps(private_key string, set_rps_chan chan int64, counter_chan chan int64) {
+func generate_load_for_rps(private_key string, set_rps_chan chan int64, counter_chan chan int64, break_load_gen chan bool) {
 	for {
 		rps := <-set_rps_chan
 		if rps > 0 {
-			generate_load(private_key, rps, 15, counter_chan)
+			generate_load(private_key, rps, 300, counter_chan, break_load_gen)
 		}
 	}
 }
@@ -329,13 +335,15 @@ func main() {
 
 	set_rps_chan := make(chan int64, 10)
 	counter_chan := make(chan int64, 10)
+	break_load_gen := make(chan bool, 10)
   var counter int64 = 0
   go func() {
     for {
     i := <- counter_chan
+    //log.Printf("%d", i)
     counter += i
   }}()
-	go generate_load_for_rps(private_key, set_rps_chan, counter_chan)
+	go generate_load_for_rps(private_key, set_rps_chan, counter_chan, break_load_gen)
 
 	var result []([]int64)
 
@@ -347,9 +355,8 @@ func main() {
 
 		log.Printf("USING %d RPS\n", rps)
 		var timings []int64
-		for i := 1; i <= 7; i++ {
-
-			set_rps_chan <- rps
+    set_rps_chan <- rps
+		for i := 1; i <= 3; i++ {
 
 			start_recording_response_chan := make(chan bool)
 			start_inference_recording_chan <- start_recording_response_chan
@@ -375,11 +382,12 @@ func main() {
 				if finished_id == probe_id {
 					transaction_included_in := time.Since(inference_sent_at).Milliseconds()
 					timings = append(timings, transaction_included_in)
-					log.Printf("Finished %v probe in: %d\n", probe_id, transaction_included_in)
+					log.Printf("Finished %v probe in: %d millisecond\n", probe_id, transaction_included_in)
 					break
 				}
 			}
 		}
+    break_load_gen <- true
 		result = append(result, []int64{rps, slices.Min(timings), slices.Max(timings)})
 	}
 	log.Printf("Result:\n%v\n", result)
