@@ -103,7 +103,7 @@ func decode_tx(tx_decoded string) (*[]TxMessage, error) {
 }
 
 
-func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []TxMessage) {
+func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []TxMessage, server_dead_notification_chan chan struct {}) {
 	defer conn.Close()
 
 	var last_height int64
@@ -119,7 +119,6 @@ func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []
 		for {
 			select {
 			case <-ticker.C:
-				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 					log.Printf("Ping error: %v", err)
 					return
@@ -141,10 +140,13 @@ func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(subMsg)); err != nil {
 		log.Fatal("write error:", err)
 	}
+
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("read error:", err)
+      server_dead_notification_chan <- struct {} {}
+      return
 		}
 
 		var tx_notification TxNotification
@@ -169,7 +171,8 @@ func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []
 	}
 }
 
-func listen_for_txs(tx_hash_notification_chan chan<- []TxMessage) {
+func listen_for_txs(tx_hash_notification_chan chan<- []TxMessage, server_dead_notification_chan chan struct {}) {
+  var connection_attempts int = 0
 	for {
 		conn, _, err := websocket.DefaultDialer.Dial("ws://genesis-node:26657/websocket", nil)
 
@@ -178,9 +181,15 @@ func listen_for_txs(tx_hash_notification_chan chan<- []TxMessage) {
 		})
 
 		if err != nil {
-			log.Println("ws connection error:", err)
+			log.Println("ws connection error, will retry:", err)
+      connection_attempts++
+      if connection_attempts > 3 {
+        server_dead_notification_chan <- struct {} {}
+        return
+      }
+      continue
 		}
-		handle_connection(conn, tx_hash_notification_chan)
+		handle_connection(conn, tx_hash_notification_chan, server_dead_notification_chan)
 	}
 }
 
@@ -301,10 +310,11 @@ func main() {
 	start_inference_recording_chan := make(chan (chan struct {}), 10)
 	inference_id_watch_chan := make(chan InferenceId, 10)
 	finished_inference_id_chan := make(chan InferenceId, 10)
+  server_dead_notification_chan := make(chan struct{}, 10)
 
 	go observe_and_report(tx_notification_chan, inference_id_watch_chan, finished_inference_id_chan, start_inference_recording_chan)
 
-	go listen_for_txs(tx_notification_chan)
+	go listen_for_txs(tx_notification_chan, server_dead_notification_chan)
 
 	set_rps_chan := make(chan int64, 10)
 	counter_chan := make(chan int64, 10)
@@ -324,11 +334,18 @@ func main() {
   for i := range rpsList {
       rpsList[i] = (int64(i) + 1) * 30
   }
+  outerloop:
 	for _, rps := range rpsList {
 
 		var timings []int64
     set_rps_chan <- rps
 		for i := 1; i <= 3; i++ {
+      select {
+      case <- server_dead_notification_chan:
+        result = append(result, []int64{rps, 10000000, 10000000})
+        break outerloop
+      default:
+      }
 
 			start_recording_response_chan := make(chan struct {})
 			start_inference_recording_chan <- start_recording_response_chan
@@ -337,11 +354,19 @@ func main() {
 			var inference_sent_at time.Time
 			var probe_id InferenceId
 			var err error
+      var probe_retry = 0
 			for {
 				inference_sent_at = time.Now()
 				probe_id, err = send_inference_req(private_key)
 				if err != nil {
 					log.Printf("Failed to send probe req %d: %s retrying...", i, err)
+          probe_retry++
+          if probe_retry > 3 {
+            log.Printf("All retries failed to send probe req %d: %s breaking...", i, err)
+            result = append(result, []int64{rps, 10000000, 10000000})
+            break outerloop
+          }
+          continue
 				} else {
 					log.Printf("Sent probe %d with %d pending requests: %s\n", i, counter, probe_id)
 					break
