@@ -54,24 +54,12 @@ type TxMessage struct {
 	RequestTimestamp int64       `json:"request_timestamp"`
 }
 
-type TxDecoded struct {
-	Body struct {
-		Messages []TxMessage `json:"messages"`
-	} `json:"body"`
-}
-
 type TxHash string
 type InferenceId string
 
-func decode_tx(tx string) (*TxDecoded, error) {
-	var result_tx TxDecoded
-	result_tx.Body.Messages = decodeTx_(tx)
-	return &result_tx, nil
-}
-
-func decodeTx_(txBase64 string) []TxMessage {
+func decode_tx(tx_decoded string) (*[]TxMessage, error) {
 	var messages []TxMessage
-	txBytes, err := base64.StdEncoding.DecodeString(txBase64)
+	txBytes, err := base64.StdEncoding.DecodeString(tx_decoded)
 	if err != nil {
 		panic(err)
 	}
@@ -82,7 +70,7 @@ func decodeTx_(txBase64 string) []TxMessage {
 	}
 
 	if protoTx.Body == nil {
-		return messages
+		return &messages, nil
 	}
 
 	for _, msgAny := range protoTx.Body.Messages {
@@ -111,10 +99,11 @@ func decodeTx_(txBase64 string) []TxMessage {
 		}
 
 	}
-	return messages
+	return &messages, nil
 }
 
-func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- TxDecoded) {
+
+func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []TxMessage) {
 	defer conn.Close()
 
 	var last_height int64
@@ -180,7 +169,7 @@ func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- Tx
 	}
 }
 
-func listen_for_txs(tx_hash_notification_chan chan<- TxDecoded) {
+func listen_for_txs(tx_hash_notification_chan chan<- []TxMessage) {
 	for {
 		conn, _, err := websocket.DefaultDialer.Dial("ws://genesis-node:26657/websocket", nil)
 
@@ -253,7 +242,7 @@ func generate_load(private_key string, rps int64, counter_chan chan int64, break
 //   - Observes transactions from chain
 //   - As soon as it observes both start/finish report the corresponding inference over
 //     finished_inference_id_chan
-func observe_and_report(tx_notification_chan chan TxDecoded, inference_id_watch_chan chan InferenceId, finished_inference_id_chan chan InferenceId, start_inference_recording_chan chan (chan struct {})) {
+func observe_and_report(tx_notification_chan chan []TxMessage, inference_id_watch_chan chan InferenceId, finished_inference_id_chan chan InferenceId, start_inference_recording_chan chan (chan struct {})) {
 	record_inferences := false
 	type ObservedTxKey struct {
 		inferenceId InferenceId
@@ -276,9 +265,9 @@ func observe_and_report(tx_notification_chan chan TxDecoded, inference_id_watch_
 		}
 
 		select {
-		case new_inference_tx := <-tx_notification_chan:
+		case new_inference_msgs := <-tx_notification_chan:
 			if record_inferences {
-				for _, msg := range new_inference_tx.Body.Messages {
+				for _, msg := range new_inference_msgs{
 					observed_txs[ObservedTxKey{inferenceId: msg.InferenceId, messageType: msg.MessageType}] = msg
 				}
 			}
@@ -308,7 +297,7 @@ func main() {
 		log.Fatal("GONKA_PRIVATE_KEY is not set")
 	}
 
-	tx_notification_chan := make(chan TxDecoded, 10)
+	tx_notification_chan := make(chan []TxMessage, 10)
 	start_inference_recording_chan := make(chan (chan struct {}), 10)
 	inference_id_watch_chan := make(chan InferenceId, 10)
 	finished_inference_id_chan := make(chan InferenceId, 10)
