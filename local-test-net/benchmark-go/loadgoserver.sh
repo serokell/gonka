@@ -9,7 +9,7 @@ moneybag_secret_key="$(docker exec genesis-node inferenced keys export POOL_prod
 docker run -it \
   --name go-workload-benchmark-server \
   --network=chain-public \
-  --ulimit nofile=16384:16384 \
+  --ulimit nofile=65536:65536 \
   -v ./experimental_logs:/app/experimental_logs \
   -v ./benchmark:/app/shared \
   -p 5001:5000 \

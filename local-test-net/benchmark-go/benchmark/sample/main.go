@@ -14,9 +14,10 @@ import (
 	inference "github.com/productscience/inference/api/inference/inference"
 	"log"
 	"os"
-	"slices"
+	//"slices"
 	"strconv"
 	"time"
+	tmhttp "github.com/cometbft/cometbft/rpc/client/http"
 	//anypb "github.com/cosmos/gogoproto/types/any"
 	//"google.golang.org/protobuf/encoding/protojson"
 	//"google.golang.org/protobuf/proto"
@@ -24,6 +25,8 @@ import (
 )
 
 const pongWait = 60 * time.Second
+
+const blockHeaderFetch = "http://genesis-node:26657/header?height=<height>"
 
 type InferenceIdReport struct {
 	inference_id InferenceId
@@ -36,15 +39,11 @@ type TxNotification struct {
 		Data struct {
 			Value struct {
 				TxResult struct {
+					Height string `json:"height"`
 					Tx string `json:"tx"`
 				}
 			} `json:"value"`
 		} `json:"data"`
-		Events struct {
-			TxAction []string `json:"message.action"`
-			TxHash   []string `json:"tx.hash"`
-			TxHeight []string `json:"tx.height"`
-		} `json:"events"`
 	} `json:"result"`
 }
 
@@ -54,12 +53,17 @@ type TxMessage struct {
 	RequestTimestamp int64       `json:"request_timestamp"`
 }
 
+type TxMessageWithHeight struct {
+  Message TxMessage
+  Height int64
+}
+
 type TxHash string
 type InferenceId string
 
-func decode_tx(tx_decoded string) (*[]TxMessage, error) {
+func decode_tx(tx_encoded string) (*[]TxMessage, error) {
 	var messages []TxMessage
-	txBytes, err := base64.StdEncoding.DecodeString(tx_decoded)
+	txBytes, err := base64.StdEncoding.DecodeString(tx_encoded)
 	if err != nil {
 		panic(err)
 	}
@@ -103,7 +107,7 @@ func decode_tx(tx_decoded string) (*[]TxMessage, error) {
 }
 
 
-func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []TxMessage, server_dead_notification_chan chan struct {}) {
+func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []TxMessageWithHeight, server_dead_notification_chan chan struct {}) {
 	defer conn.Close()
 
 	var last_height int64
@@ -151,27 +155,28 @@ func handle_connection(conn *websocket.Conn, tx_hash_notification_chan chan<- []
 
 		var tx_notification TxNotification
 		json.Unmarshal(message, &tx_notification)
-		//log.Printf("received: %s \n", tx_notification.Result.Data.Value.TxResult.Tx)
-		for _, h := range tx_notification.Result.Events.TxHeight {
-			iheight, _ := strconv.ParseInt(h, 10, 64)
+		for {
+			iheight, _ := strconv.ParseInt(tx_notification.Result.Data.Value.TxResult.Height, 10, 64)
 			if last_height < iheight {
 				last_height = iheight
 			}
-		}
-		for {
 			decoded, err := decode_tx(tx_notification.Result.Data.Value.TxResult.Tx)
 			if err != nil {
 				log.Printf("Failed to decode tx %s", err)
 				continue
 			} else {
-				tx_hash_notification_chan <- *decoded
+        var tx_with_height []TxMessageWithHeight
+        for _, txmsg := range *decoded {
+          tx_with_height = append(tx_with_height, TxMessageWithHeight { Message : txmsg, Height: iheight })
+        }
+        tx_hash_notification_chan <- tx_with_height
 				break
 			}
 		}
 	}
 }
 
-func listen_for_txs(tx_hash_notification_chan chan<- []TxMessage, server_dead_notification_chan chan struct {}) {
+func listen_for_txs(tx_hash_notification_chan chan<- []TxMessageWithHeight, server_dead_notification_chan chan struct {}) {
   var connection_attempts int = 0
 	for {
 		conn, _, err := websocket.DefaultDialer.Dial("ws://genesis-node:26657/websocket", nil)
@@ -247,29 +252,36 @@ func generate_load(private_key string, rps int64, counter_chan chan int64, break
 	log.Printf("%d Threads created in %d milliseconds for %d RPS\n", i, time.Since(outer_start).Milliseconds(), rps)
 }
 
+type FinishedInferenceReport struct {
+  InferenceId InferenceId
+  RequestTimestamp int64
+  StartInferenceBlockHeight int64
+  FinishInferenceBlockHeight int64
+}
+
 //   - Gets the inference ids to watch for over a channel and adds them to watched_inferences
 //   - Observes transactions from chain
 //   - As soon as it observes both start/finish report the corresponding inference over
 //     finished_inference_id_chan
-func observe_and_report(tx_notification_chan chan []TxMessage, inference_id_watch_chan chan InferenceId, finished_inference_id_chan chan InferenceId, start_inference_recording_chan chan (chan struct {})) {
+func observe_and_report(tx_notification_chan chan []TxMessageWithHeight, inference_id_watch_chan chan InferenceId, finished_inference_id_chan chan FinishedInferenceReport, start_inference_recording_chan chan (chan struct {})) {
 	record_inferences := false
 	type ObservedTxKey struct {
 		inferenceId InferenceId
 		messageType string
 	}
 	watched_inferences := make(map[InferenceId]bool)
-	observed_txs := make(map[ObservedTxKey]TxMessage)
+	observed_txs := make(map[ObservedTxKey]TxMessageWithHeight)
 	for {
 
 		for watched_inference_id, _ := range watched_inferences {
-			_, start_inf_exists := observed_txs[ObservedTxKey{inferenceId: watched_inference_id, messageType: "/inference.inference.MsgStartInference"}]
-			_, finish_inf_exists := observed_txs[ObservedTxKey{inferenceId: watched_inference_id, messageType: "/inference.inference.MsgFinishInference"}]
+			sm, start_inf_exists := observed_txs[ObservedTxKey{inferenceId: watched_inference_id, messageType: "/inference.inference.MsgStartInference"}]
+			fm, finish_inf_exists := observed_txs[ObservedTxKey{inferenceId: watched_inference_id, messageType: "/inference.inference.MsgFinishInference"}]
 			if finish_inf_exists && start_inf_exists {
 				record_inferences = false
-				finished_inference_id_chan <- watched_inference_id
+        finished_inference_id_chan <- FinishedInferenceReport { InferenceId : watched_inference_id, RequestTimestamp: sm.Message.RequestTimestamp,  StartInferenceBlockHeight: sm.Height, FinishInferenceBlockHeight : fm.Height }
 				// clear watched item and empty cached transactions
 				delete(watched_inferences, watched_inference_id)
-				observed_txs = make(map[ObservedTxKey]TxMessage)
+				observed_txs = make(map[ObservedTxKey]TxMessageWithHeight)
 			}
 		}
 
@@ -277,7 +289,7 @@ func observe_and_report(tx_notification_chan chan []TxMessage, inference_id_watc
 		case new_inference_msgs := <-tx_notification_chan:
 			if record_inferences {
 				for _, msg := range new_inference_msgs{
-					observed_txs[ObservedTxKey{inferenceId: msg.InferenceId, messageType: msg.MessageType}] = msg
+					observed_txs[ObservedTxKey{inferenceId: msg.Message.InferenceId, messageType: msg.Message.MessageType}] = msg
 				}
 			}
 		case new_watch := <-inference_id_watch_chan:
@@ -305,11 +317,16 @@ func main() {
 	if private_key == "" {
 		log.Fatal("GONKA_PRIVATE_KEY is not set")
 	}
+  client, err := tmhttp.New("http://genesis-node:26657", "/websocket")
+  if err != nil {
+    panic(err)
+  }
+  ctx := context.Background()
 
-	tx_notification_chan := make(chan []TxMessage, 10)
+	tx_notification_chan := make(chan []TxMessageWithHeight, 10)
 	start_inference_recording_chan := make(chan (chan struct {}), 10)
 	inference_id_watch_chan := make(chan InferenceId, 10)
-	finished_inference_id_chan := make(chan InferenceId, 10)
+	finished_inference_id_chan := make(chan FinishedInferenceReport, 10)
   server_dead_notification_chan := make(chan struct{}, 10)
 
 	go observe_and_report(tx_notification_chan, inference_id_watch_chan, finished_inference_id_chan, start_inference_recording_chan)
@@ -328,21 +345,31 @@ func main() {
   }}()
 	go generate_load_for_rps(private_key, set_rps_chan, counter_chan, break_load_gen)
 
-	var result []([]int64)
+  type Timing struct {
+    WallClockLatency int64
+    BlockTimeLatency int64
+    InferenceRequestTimeDelta int64
+  }
 
-  rpsList := make([]int64, 12)
+  type BenchmarkResult struct {
+    RPS int64
+    Timings []Timing
+  }
+	var result []BenchmarkResult
+
+  rpsList := make([]int64, 9)
   for i := range rpsList {
       rpsList[i] = (int64(i) + 1) * 30
   }
   outerloop:
 	for _, rps := range rpsList {
 
-		var timings []int64
+		var timings []Timing
     set_rps_chan <- rps
 		for i := 1; i <= 3; i++ {
       select {
       case <- server_dead_notification_chan:
-        result = append(result, []int64{rps, 10000000, 10000000})
+        result = append(result, BenchmarkResult { RPS: rps, Timings: []Timing{}})
         break outerloop
       default:
       }
@@ -363,7 +390,7 @@ func main() {
           probe_retry++
           if probe_retry > 3 {
             log.Printf("All retries failed to send probe req %d: %s breaking...", i, err)
-            result = append(result, []int64{rps, 10000000, 10000000})
+            result = append(result, BenchmarkResult { RPS: rps, Timings: []Timing{}})
             break outerloop
           }
           continue
@@ -375,17 +402,23 @@ func main() {
 			log.Printf("Waiting for probe: %s\n", probe_id)
 			inference_id_watch_chan <- probe_id
 			for {
-				finished_id := <-finished_inference_id_chan
-				if finished_id == probe_id {
+				finished_report := <-finished_inference_id_chan
+				if finished_report.InferenceId == probe_id {
 					transaction_included_in := time.Since(inference_sent_at).Milliseconds()
-					timings = append(timings, transaction_included_in)
+
+          last_height := max(finished_report.StartInferenceBlockHeight, finished_report.FinishInferenceBlockHeight)
+          res, err := client.Header(ctx, &last_height)
+          if err != nil {
+            panic(err)
+          }
+          timings = append(timings, Timing { InferenceRequestTimeDelta: time.Duration(finished_report.RequestTimestamp - inference_sent_at.UnixNano()).Milliseconds(),  WallClockLatency: transaction_included_in, BlockTimeLatency: time.Duration(res.Header.Time.UnixNano() - finished_report.RequestTimestamp).Milliseconds()})
 					log.Printf("Finished %v probe in: %d millisecond\n", probe_id, transaction_included_in)
 					break
 				}
 			}
 		}
     break_load_gen <- struct {}{}
-		result = append(result, []int64{rps, slices.Min(timings), slices.Max(timings)})
+    result = append(result, BenchmarkResult{ RPS: rps, Timings: timings })
 	}
 	log.Printf("Result:\n%v\n", result)
 }
