@@ -5,6 +5,7 @@ set -e
 
 NUM_JOIN_NODES="${1:-2}"
 EPOCH_LENGTH="${2:-10000}"
+DEBUG=true
 
 ./launch_benchmark_nodes.sh "$NUM_JOIN_NODES"
 ./propose-large-epoch.sh "$EPOCH_LENGTH"

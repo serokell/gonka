@@ -15,8 +15,8 @@
     },
     "hardware": [
       {
-        "type": "v5e",
-        "count": 80
+        "type": "A100",
+        "count": 1
       }
     ]
   }

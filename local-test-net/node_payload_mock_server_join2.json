@@ -15,12 +15,8 @@
     },
     "hardware": [
       {
-        "type": "A600",
-        "count": 50
-      },
-      {
-        "type": "A5500",
-        "count": 2
+        "type": "A100",
+        "count": 1
       }
     ]
   }

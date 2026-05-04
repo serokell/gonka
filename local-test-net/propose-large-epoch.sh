@@ -2,7 +2,7 @@
 # Submit a governance proposal to change epoch params and vote on it from all nodes.
 # Discovers join nodes automatically from prod-local/ directories.
 # Usage: ./propose-large-epoch.sh [epoch_length]
-set -e
+set -ex
 
 EPOCH_LENGTH="${1:-10000}"
 CHAIN_ID="gonka-mainnet"
@@ -68,7 +68,12 @@ PROPOSAL_JSON="$(echo "$CURRENT_PARAMS" | jq '{
   messages: [{
     "@type": "/inference.inference.MsgUpdateParams",
     authority: "'"$AUTHORITY"'",
-    params: (.params | .epoch_params.epoch_length = "'"$EPOCH_LENGTH"'")
+    params: (
+      .params
+      | .epoch_params.epoch_length = "'"$EPOCH_LENGTH"'"
+      | .poc_params.models |= (map(. + {model_id: (.model_id // "")}))
+      | .poc_params.models[0].model_id = .delegation_params.initial_model_id
+    )
   }],
   deposit: "'"$DEPOSIT"'",
   title: "Change epoch length to '"$EPOCH_LENGTH"'",
@@ -96,6 +101,14 @@ TX_HASH="$(docker exec "$GENESIS_CONTAINER" inferenced tx gov submit-proposal "$
 
 echo "=== Waiting for tx to be included (txhash: $TX_HASH) ==="
 sleep 6
+
+out="$(docker run --rm --network chain-public \
+  -v /home/heitor/Work/gonka/gonka/local-test-net/prod-local/genesis:/root/.inference \
+  ghcr.io/product-science/inferenced \
+  inferenced query tx $TX_HASH \
+  -o json --node $NODE_URL 2>&1)"
+ec=$?
+printf 'exit=%s\n%s\n' "$ec" "$out"
 
 # Get the proposal ID from the tx result
 PROPOSAL_ID="$(run_genesis query tx "$TX_HASH" -o json --node "$NODE_URL" \
