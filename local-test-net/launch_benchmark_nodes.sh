@@ -53,7 +53,7 @@ if [ -n "$(ls -A ./public-html 2>/dev/null)" ]; then
 fi
 
 echo "Starting genesis node"
-docker compose -p genesis -f docker-compose-base.yml $RESOURCES_FILE -f docker-compose.genesis.yml -f docker-compose.proxy.yml -f docker-compose.explorer.yml up -d
+docker compose -p genesis -f docker-compose-base.yml $RESOURCES_FILE -f docker-compose.genesis.yml -f docker-compose.explorer.yml -f docker-compose.debug.yml up -d
 sleep 40
 
 # --- Join nodes ---
@@ -64,6 +64,7 @@ export IS_GENESIS=false
 
 for i in $(seq 1 "$NUM_JOIN_NODES"); do
   export KEY_NAME="join${i}"
+  export PROXY_PORT=$((80+i))
   export NODE_CONFIG
   NODE_CONFIG="$(generate_node_config "$KEY_NAME")"
   export PUBLIC_URL="http://${KEY_NAME}-api:9000"
@@ -87,5 +88,5 @@ for i in $(seq 1 "$NUM_JOIN_NODES"); do
   fi
 
   echo "Starting join node '${KEY_NAME}'"
-  docker compose -p "$project_name" -f docker-compose-base.yml $RESOURCES_FILE -f docker-compose.join.yml up -d
+  docker compose -p "$project_name" -f docker-compose-base.yml $RESOURCES_FILE -f docker-compose.join.yml -f docker-compose.debug.yml up -d
 done

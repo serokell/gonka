@@ -68,7 +68,12 @@ PROPOSAL_JSON="$(echo "$CURRENT_PARAMS" | jq '{
   messages: [{
     "@type": "/inference.inference.MsgUpdateParams",
     authority: "'"$AUTHORITY"'",
-    params: (.params | .epoch_params.epoch_length = "'"$EPOCH_LENGTH"'")
+    params: (
+      .params
+      | .epoch_params.epoch_length = "'"$EPOCH_LENGTH"'"
+      | .poc_params.models |= (map(. + {model_id: (.model_id // "")}))
+      | .poc_params.models[0].model_id = .delegation_params.initial_model_id
+    )
   }],
   deposit: "'"$DEPOSIT"'",
   title: "Change epoch length to '"$EPOCH_LENGTH"'",

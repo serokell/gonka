@@ -1,0 +1,4 @@
+services:
+  chain-node:
+    environment:
+      - DEBUG=true

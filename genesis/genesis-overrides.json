@@ -21,17 +21,26 @@
     },
     "inference": {
       "params": {
+        "poc_params": {
+          "poc_v2_enabled": true,
+          "confirmation_poc_v2_enabled": true,
+          "models": [
+            {
+              "model_id": "Qwen/Qwen2.5-7B-Instruct"
+            }
+          ]
+        },
         "epoch_params": {
-        "epoch_length": "17280",
-        "epoch_multiplier": "1",
-        "epoch_shift": "16980",
-        "poc_stage_duration": "60",
-        "poc_exchange_duration": "5",
-        "poc_validation_delay": "5",
-        "poc_validation_duration": "20",
-        "set_new_validators_delay": "120",
-        "inference_validation_cutoff": "80",
-        "default_unit_of_compute_price": "100"
+          "epoch_length": "17280",
+          "epoch_multiplier": "1",
+          "epoch_shift": "16980",
+          "poc_stage_duration": "60",
+          "poc_exchange_duration": "5",
+          "poc_validation_delay": "5",
+          "poc_validation_duration": "20",
+          "set_new_validators_delay": "120",
+          "inference_validation_cutoff": "80",
+          "default_unit_of_compute_price": "100"
         },
         "bandwidth_limits_params": {
           "estimated_limits_per_block_kb": "10752",

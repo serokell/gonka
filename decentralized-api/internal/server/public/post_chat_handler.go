@@ -361,7 +361,6 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 			if st.Code() == codes.NotFound {
 				return echo.NewHTTPError(http.StatusNotFound, "model not found")
 			}
-			return echo.NewHTTPError(http.StatusServiceUnavailable, "no executors available for model")
 		}
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "no executors available for model")
 	}
@@ -1094,6 +1093,7 @@ func (s *Server) validateModelSupported(model string) error {
 		logging.Warn("Failed to fetch current epoch group data for model validation", types.Inferences, "error", err)
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "unable to fetch current epoch group data")
 	}
+	logging.Info("Listing models", types.Inferences, "subGroupModels", epochGroupData.SubGroupModels)
 	for _, m := range epochGroupData.SubGroupModels {
 		if m == model {
 			return nil

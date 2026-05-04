@@ -69,6 +69,46 @@ fun Route.inferenceRoutes(responseService: ResponseService, sseService: SSEServi
     post("/{...segments}/v1/chat/completions") {
         handleChatCompletions(call, responseService, sseService)
     }
+
+    suspend fun getModelsList(call: ApplicationCall) {
+        call.respond(
+            HttpStatusCode.OK,
+            mapOf(
+                "models" to listOf(
+                    mapOf(
+                        "model" to mapOf(
+                            "hf_repo" to "Qwen/Qwen2.5-7B-Instruct",
+                            "hf_commit" to null,
+                        ),
+                        "status" to "DOWNLOADED",
+                    ),
+                ),
+            ),
+        )
+    }
+
+    suspend fun postModelsStatus(call: ApplicationCall) {
+        call.respond(
+            HttpStatusCode.OK,
+            mapOf(
+                "model" to mapOf(
+                    "hf_repo" to "Qwen/Qwen2.5-7B-Instruct",
+                    "hf_commit" to null,
+                ),
+                "status" to "DOWNLOADED",
+                "progress" to null,
+                "error_message" to null,
+            ),
+        )
+    }
+
+    get("/{...segments}/v1/models") { getModelsList(call) }
+    get("/v1/models") { getModelsList(call) }
+    get("/api/v1/models/list") { getModelsList(call) }
+    get("/{...segments}/api/v1/models/list") { getModelsList(call) }
+
+    post("/api/v1/models/status") { postModelsStatus(call) }
+    post("/{...segments}/api/v1/models/status") { postModelsStatus(call) }
 }
 
 /**

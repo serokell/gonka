@@ -20,6 +20,15 @@
     },
     "inference": {
       "params": {
+        "poc_params": {
+          "poc_v2_enabled": true,
+          "confirmation_poc_v2_enabled": true,
+          "models": [
+            {
+              "model_id": "Qwen/Qwen2.5-7B-Instruct"
+            }
+          ]
+        },
         "epoch_params": {
           "epoch_length": "2000",
           "epoch_multiplier": "1",
