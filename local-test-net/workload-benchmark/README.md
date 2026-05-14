@@ -53,6 +53,15 @@ Run the following in the same terminal session.
 ./loadserver_rebuild_and_run.sh
 ```
 
+### Start the devshard flow
+
+Run the following in the same terminal session.
+```
+./devshard_flow.sh
+```
+
+The script stops early if the devshard inference or finalization returns an error payload, which helps catch slot-distribution and timeout-voting issues before submitting settlement on-chain.
+
 ### Start the benchmark
 
 At this point, you should be able to access the benchmark interface at local port `5001`.
