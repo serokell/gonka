@@ -78,6 +78,15 @@ ensure_tx_success "$TRANSFER_TX"
 
 echo "=== Copying devshardctl into $GENESIS_CONTAINER ==="
 DEVSHARDCTL_LOCAL_BUILD_PATH="$SCRIPT_DIR/../../build/devshardctl"
+if [ ! -f "$DEVSHARDCTL_LOCAL_BUILD_PATH" ]; then
+  echo "=== Missing devshardctl build at $DEVSHARDCTL_LOCAL_BUILD_PATH ==="
+  exit 1
+fi
+GENESIS_KEY_FILE="$SCRIPT_DIR/../genesis-keys/cold.hex"
+if [ ! -f "$GENESIS_KEY_FILE" ]; then
+  echo "=== Missing genesis private key at $GENESIS_KEY_FILE ==="
+  exit 1
+fi
 docker cp "$DEVSHARDCTL_LOCAL_BUILD_PATH" "$GENESIS_CONTAINER:/usr/local/bin/devshardctl"
 docker exec "$GENESIS_CONTAINER" sh -lc 'chmod +x /usr/local/bin/devshardctl && command -v devshardctl'
 
@@ -118,8 +127,13 @@ ESCROW_JSON="$({
   docker exec "$GENESIS_CONTAINER" inferenced query inference show-devshard-escrow "$ESCROW_ID" \
     --node "$NODE_URL" -o json
 })"
+if ! echo "$ESCROW_JSON" | jq -e '.escrow.slots | type == "array"' >/dev/null 2>&1; then
+  echo "=== Escrow slots are missing from the query response ==="
+  echo "$ESCROW_JSON" | jq .
+  exit 1
+fi
 TOTAL_SLOTS="$(echo "$ESCROW_JSON" | jq -r '.escrow.slots | length')"
-MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0 | tonumber')"
+MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0')"
 
 # Timeout voting needs a strict majority of distinct slot owners, so abort if one host owns more than half of the slots.
 if [ "$MAX_SLOTS_PER_HOST" -gt $((TOTAL_SLOTS / 2)) ]; then
@@ -135,7 +149,7 @@ DEVSHARD_PORT="8080"
 ensure_curl
 docker exec \
   -d "$GENESIS_CONTAINER" \
-  sh -lc "DEVSHARD_PRIVATE_KEY='$(cat ../genesis-keys/cold.hex)' DEVSHARD_ESCROW_ID='$ESCROW_ID' DEVSHARD_CHAIN_REST='http://localhost:$CHAIN_REST_PORT' DEVSHARD_PORT='$DEVSHARD_PORT' DEVSHARD_STORAGE_PATH='/tmp/devshardctl-proxy-${ESCROW_ID}.db' DEVSHARD_ROUTE_PREFIX='/v1/devshard' devshardctl >'$STDERR_FILE' 2>&1"
+  sh -lc "DEVSHARD_PRIVATE_KEY='$(cat "$GENESIS_KEY_FILE")' DEVSHARD_ESCROW_ID='$ESCROW_ID' DEVSHARD_CHAIN_REST='http://localhost:$CHAIN_REST_PORT' DEVSHARD_PORT='$DEVSHARD_PORT' DEVSHARD_STORAGE_PATH='/tmp/devshardctl-proxy-${ESCROW_ID}.db' DEVSHARD_ROUTE_PREFIX='/v1/devshard' devshardctl >'$STDERR_FILE' 2>&1"
 PROXY_STARTED=1
 
 echo "=== Waiting for devshardctl to be ready ==="
@@ -157,6 +171,7 @@ fi
 echo "=== Running load ==="
 # TODO: Replace this direct inference with the workload flow once the benchmark container can drive devshard requests end-to-end.
 
+# Use a minimal token budget so the request exercises the execution/signature path without adding unnecessary load.
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
 REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" '{model: $model, stream: false, max_tokens: 1}')"
 INFERENCE_URL="http://localhost:$DEVSHARD_PORT/v1/chat/completions"
@@ -181,6 +196,7 @@ fi
 SETTLEMENT_JSON="settlement-$ESCROW_ID.json"
 SETTLEMENT_JSON_CONTAINER="/tmp/$SETTLEMENT_JSON"
 echo "=== Waiting before finalization ==="
+# Match the 2s pre-finalize delay used by the devshard test helpers so receipts can settle before finalization.
 sleep 2
 echo "=== Finalizing devshardctl (settlement JSON: $SETTLEMENT_JSON) ==="
 docker exec "$GENESIS_CONTAINER" sh -lc "curl -sS -X POST 'http://localhost:$DEVSHARD_PORT/v1/finalize' -H 'Content-Type: application/json'" \
