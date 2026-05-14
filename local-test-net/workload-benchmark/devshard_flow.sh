@@ -7,6 +7,7 @@ CHAIN_RPC_PORT="26657"
 CHAIN_REST_PORT="1317"
 DEVSHARD_ESCROW_AMOUNT=7000000000
 MODEL_ID="Qwen/Qwen2.5-7B-Instruct"
+MAX_ESCROW_ID_ATTEMPTS=3
 NODE_URL="http://$GENESIS_CONTAINER:$CHAIN_RPC_PORT"
 STDERR_FILE=""
 PROXY_STARTED=0
@@ -38,7 +39,7 @@ ensure_tx_success() {
   tx_code="$(echo "$tx_json" | jq -r '.code // 0')"
   if [ "$tx_code" != "0" ]; then
     echo "=== Failed with code $tx_code: $(echo "$tx_json" | jq -r '.raw_log // "unknown error"') ==="
-    exit "$tx_code"
+    exit 1
   fi
 }
 
@@ -79,7 +80,7 @@ docker cp "$DEVSHARDCTL_LOCAL_BUILD_PATH" "$GENESIS_CONTAINER:/usr/local/bin/dev
 docker exec "$GENESIS_CONTAINER" sh -lc 'chmod +x /usr/local/bin/devshardctl && command -v devshardctl'
 
 ESCROW_ID=""
-while [ -z "$ESCROW_ID" ]; do
+for attempt in $(seq 1 "$MAX_ESCROW_ID_ATTEMPTS"); do
   echo "=== Creating escrow ID ==="
   TX_HASH="$({
     docker exec "$GENESIS_CONTAINER" inferenced tx inference create-devshard-escrow \
@@ -91,18 +92,24 @@ while [ -z "$ESCROW_ID" ]; do
   ESCROW_TX="$(wait_for_tx "$TX_HASH")"
   ensure_tx_success "$ESCROW_TX"
 
-  ESCROW_ID="$(
+  ESCROW_ID="$({
     echo "$ESCROW_TX" \
     | jq -r '.events[]? | select(.type=="devshard_escrow_created") | .attributes[]? | select(.key=="escrow_id") | .value' \
     | tail -n1
-  )"
+  })"
 
-  if [ -z "$ESCROW_ID" ]; then
-    echo "=== Escrow ID is empty even though the tx was included, aborting ==="
-    echo "$ESCROW_TX" | jq .
-    exit 1
+  if [ -n "$ESCROW_ID" ]; then
+    break
   fi
+
+  echo "=== Escrow ID is empty even though the tx was included (attempt $attempt/$MAX_ESCROW_ID_ATTEMPTS) ==="
+  echo "$ESCROW_TX" | jq .
 done
+
+if [ -z "$ESCROW_ID" ]; then
+  echo "=== Escrow ID is still empty after $MAX_ESCROW_ID_ATTEMPTS attempts, aborting ==="
+  exit 1
+fi
 
 echo "=== Querying escrow ==="
 ESCROW_JSON="$({
@@ -110,7 +117,7 @@ ESCROW_JSON="$({
     --node "$NODE_URL" -o json
 })"
 TOTAL_SLOTS="$(echo "$ESCROW_JSON" | jq -r '.escrow.slots | length')"
-MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0')"
+MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0 | tonumber')"
 
 if [ "$MAX_SLOTS_PER_HOST" -gt $((TOTAL_SLOTS / 2)) ]; then
   echo "=== Escrow slot distribution is too skewed for timeout voting, aborting ==="
@@ -151,8 +158,9 @@ WORKLOAD_SCHEDULE="ping"
 #docker exec $WORKLOAD_CONTAINER bash -lc "python load_testing.py --schedule $WORKLOAD_SCHEDULE"
 
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
+REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" '{model: $model, stream: false, max_tokens: 0}')"
 echo "=== Sending a devshard inference ==="
-HTTP_STATUS="$(docker exec "$GENESIS_CONTAINER" sh -lc "curl -sS -o '$RESPONSE_FILE' -w '%{http_code}' -X POST 'http://localhost:$DEVSHARD_PORT/v1/chat/completions' -H 'Content-Type: application/json' -d '{\"model\":\"$MODEL_ID\",\"stream\":false,\"max_tokens\":0}'")"
+HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" sh -lc "curl -sS -o '$RESPONSE_FILE' -w '%{http_code}' -X POST 'http://localhost:$DEVSHARD_PORT/v1/chat/completions' -H 'Content-Type: application/json' --data-binary @-" <<<"$REQUEST_JSON")"
 docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE"
 if [ "$HTTP_STATUS" != "200" ]; then
   echo "=== Devshard inference failed with HTTP $HTTP_STATUS ==="
