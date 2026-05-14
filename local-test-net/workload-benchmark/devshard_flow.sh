@@ -10,6 +10,7 @@ CHAIN_REST_PORT="1317"
 DEVSHARD_ESCROW_AMOUNT=7000000000
 MODEL_ID="Qwen/Qwen2.5-7B-Instruct"
 MIN_TOKEN_BUDGET=1
+PRE_FINALIZE_DELAY_SECONDS=2
 MAX_ESCROW_ID_ATTEMPTS=3
 NODE_URL="http://$GENESIS_CONTAINER:$CHAIN_RPC_PORT"
 STDERR_FILE=""
@@ -192,21 +193,21 @@ echo "=== Running load ==="
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
 REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" --argjson max_tokens "$MIN_TOKEN_BUDGET" '{model: $model, stream: false, max_tokens: $max_tokens}')"
 INFERENCE_URL="http://localhost:$DEVSHARD_PORT/v1/chat/completions"
-INFERENCE_CURL_COMMAND="curl -sS -o '$RESPONSE_FILE' -w '%{http_code}' -X POST '$INFERENCE_URL' -H 'Content-Type: application/json' --data-binary @-"
 echo "=== Sending a devshard inference ==="
-HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" sh -lc "$INFERENCE_CURL_COMMAND" <<<"$REQUEST_JSON")"
-docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE"
+HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' -X POST "$INFERENCE_URL" -H 'Content-Type: application/json' --data-binary @- <<<"$REQUEST_JSON")"
+INFERENCE_RESPONSE="$(docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE")"
+echo "$INFERENCE_RESPONSE"
 if [ "$HTTP_STATUS" != "200" ]; then
   echo "=== Devshard inference failed with HTTP $HTTP_STATUS ==="
   exit 1
 fi
-if ! docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE" | jq . >/dev/null 2>&1; then
+if ! echo "$INFERENCE_RESPONSE" | jq . >/dev/null 2>&1; then
   echo "=== Devshard inference did not return JSON ==="
   exit 1
 fi
-if docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE" | jq -e '.error' >/dev/null 2>&1; then
+if echo "$INFERENCE_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
   echo "=== Devshard inference returned an error payload ==="
-  docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE" | jq .
+  echo "$INFERENCE_RESPONSE" | jq .
   exit 1
 fi
 
@@ -214,22 +215,23 @@ SETTLEMENT_JSON="settlement-$ESCROW_ID.json"
 SETTLEMENT_JSON_CONTAINER="/tmp/$SETTLEMENT_JSON"
 echo "=== Waiting before finalization ==="
 # Match the 2s pre-finalize delay used by the devshard test helpers so receipts can settle before finalization.
-sleep 2
+sleep "$PRE_FINALIZE_DELAY_SECONDS"
 echo "=== Finalizing devshardctl (settlement JSON: $SETTLEMENT_JSON) ==="
-docker exec "$GENESIS_CONTAINER" sh -lc "curl -sS -X POST 'http://localhost:$DEVSHARD_PORT/v1/finalize' -H 'Content-Type: application/json'" \
+docker exec "$GENESIS_CONTAINER" curl -sS -X POST "http://localhost:$DEVSHARD_PORT/v1/finalize" -H 'Content-Type: application/json' \
   > "$SETTLEMENT_JSON"
 
-if ! jq . "$SETTLEMENT_JSON" >/dev/null 2>&1; then
+SETTLEMENT_KIND="$(jq -r 'if type != "object" then "non_json" elif has("error") then "error" elif (.version and .escrow_id and .state_root and .signatures) then "settlement" else "invalid" end' "$SETTLEMENT_JSON" 2>/dev/null || true)"
+if [ "$SETTLEMENT_KIND" = "non_json" ] || [ -z "$SETTLEMENT_KIND" ]; then
   echo "=== Finalization did not return JSON ==="
   cat "$SETTLEMENT_JSON"
   exit 1
 fi
-if jq -e '.error' "$SETTLEMENT_JSON" >/dev/null 2>&1; then
+if [ "$SETTLEMENT_KIND" = "error" ]; then
   echo "=== Finalization returned an error payload ==="
   jq . "$SETTLEMENT_JSON"
   exit 1
 fi
-if ! jq -e '.version and .escrow_id and .state_root and .signatures' "$SETTLEMENT_JSON" >/dev/null 2>&1; then
+if [ "$SETTLEMENT_KIND" != "settlement" ]; then
   echo "=== Finalization did not return settlement JSON ==="
   cat "$SETTLEMENT_JSON"
   exit 1
