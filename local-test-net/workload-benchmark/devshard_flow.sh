@@ -152,10 +152,8 @@ if [ "$READY" -ne 1 ]; then
 fi
 
 echo "=== Running load ==="
-WORKLOAD_CONTAINER="workload-benchmark-server"
-WORKLOAD_SCHEDULE="ping"
 # TODO: Use --flow devshards
-#docker exec $WORKLOAD_CONTAINER bash -lc "python load_testing.py --schedule $WORKLOAD_SCHEDULE"
+#docker exec workload-benchmark-server bash -lc "python load_testing.py --schedule ping"
 
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
 REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" '{model: $model, stream: false, max_tokens: 0}')"
