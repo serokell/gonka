@@ -9,6 +9,7 @@ CHAIN_RPC_PORT="26657"
 CHAIN_REST_PORT="1317"
 DEVSHARD_ESCROW_AMOUNT=7000000000
 MODEL_ID="Qwen/Qwen2.5-7B-Instruct"
+MIN_TOKEN_BUDGET=1
 MAX_ESCROW_ID_ATTEMPTS=3
 NODE_URL="http://$GENESIS_CONTAINER:$CHAIN_RPC_PORT"
 STDERR_FILE=""
@@ -137,7 +138,13 @@ if ! echo "$ESCROW_JSON" | jq -e '.escrow.slots | type == "array"' >/dev/null 2>
   exit 1
 fi
 TOTAL_SLOTS="$(echo "$ESCROW_JSON" | jq -r '.escrow.slots | length')"
+# Group slots by owner address, count each group, then take the largest count.
 MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0')"
+if ! [[ "$TOTAL_SLOTS" =~ ^[0-9]+$ && "$MAX_SLOTS_PER_HOST" =~ ^[0-9]+$ ]]; then
+  echo "=== Escrow slot counts are not numeric ==="
+  echo "$ESCROW_JSON" | jq .
+  exit 1
+fi
 
 # Timeout voting needs a strict majority of distinct slot owners, so abort if one host owns more than half of the slots.
 if [ $((MAX_SLOTS_PER_HOST * 2)) -gt "$TOTAL_SLOTS" ]; then
@@ -183,7 +190,7 @@ echo "=== Running load ==="
 
 # Use a minimal token budget so the request exercises the execution/signature path without adding unnecessary load.
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
-REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" '{model: $model, stream: false, max_tokens: 1}')"
+REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" --argjson max_tokens "$MIN_TOKEN_BUDGET" '{model: $model, stream: false, max_tokens: $max_tokens}')"
 INFERENCE_URL="http://localhost:$DEVSHARD_PORT/v1/chat/completions"
 INFERENCE_CURL_COMMAND="curl -sS -o '$RESPONSE_FILE' -w '%{http_code}' -X POST '$INFERENCE_URL' -H 'Content-Type: application/json' --data-binary @-"
 echo "=== Sending a devshard inference ==="
