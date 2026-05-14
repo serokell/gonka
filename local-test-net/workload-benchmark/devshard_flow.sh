@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 FROM_NAME="genesis"
 GENESIS_CONTAINER="$FROM_NAME-node"
 CHAIN_RPC_PORT="26657"
@@ -75,7 +77,7 @@ TRANSFER_TX="$(wait_for_tx "$TX_HASH")"
 ensure_tx_success "$TRANSFER_TX"
 
 echo "=== Copying devshardctl into $GENESIS_CONTAINER ==="
-DEVSHARDCTL_LOCAL_BUILD_PATH=../../build/devshardctl
+DEVSHARDCTL_LOCAL_BUILD_PATH="$SCRIPT_DIR/../../build/devshardctl"
 docker cp "$DEVSHARDCTL_LOCAL_BUILD_PATH" "$GENESIS_CONTAINER:/usr/local/bin/devshardctl"
 docker exec "$GENESIS_CONTAINER" sh -lc 'chmod +x /usr/local/bin/devshardctl && command -v devshardctl'
 
@@ -119,6 +121,7 @@ ESCROW_JSON="$({
 TOTAL_SLOTS="$(echo "$ESCROW_JSON" | jq -r '.escrow.slots | length')"
 MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0 | tonumber')"
 
+# Timeout voting needs a strict majority of distinct slot owners, so abort if one host owns more than half of the slots.
 if [ "$MAX_SLOTS_PER_HOST" -gt $((TOTAL_SLOTS / 2)) ]; then
   echo "=== Escrow slot distribution is too skewed for timeout voting, aborting ==="
   echo "$ESCROW_JSON" \
@@ -152,11 +155,10 @@ if [ "$READY" -ne 1 ]; then
 fi
 
 echo "=== Running load ==="
-# TODO: Use --flow devshards
-#docker exec workload-benchmark-server bash -lc "python load_testing.py --schedule ping"
+# TODO: Replace this direct inference with the workload flow once the benchmark container can drive devshard requests end-to-end.
 
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
-REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" '{model: $model, stream: false, max_tokens: 0}')"
+REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" '{model: $model, stream: false, max_tokens: 1}')"
 echo "=== Sending a devshard inference ==="
 HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" sh -lc "curl -sS -o '$RESPONSE_FILE' -w '%{http_code}' -X POST 'http://localhost:$DEVSHARD_PORT/v1/chat/completions' -H 'Content-Type: application/json' --data-binary @-" <<<"$REQUEST_JSON")"
 docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE"
