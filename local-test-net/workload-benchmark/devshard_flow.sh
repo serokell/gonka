@@ -55,9 +55,13 @@ print_proxy_logs() {
   fi
 }
 
+stop_proxy() {
+  docker exec "$GENESIS_CONTAINER" sh -lc "pkill -f 'DEVSHARD_ESCROW_ID=$ESCROW_ID.*devshardctl' || true" || true
+}
+
 cleanup() {
   if [ "$PROXY_STARTED" -eq 1 ]; then
-    docker exec "$GENESIS_CONTAINER" sh -lc "pkill -f 'DEVSHARD_ESCROW_ID=$ESCROW_ID.*devshardctl' || true" || true
+    stop_proxy
   fi
 }
 
@@ -136,7 +140,7 @@ TOTAL_SLOTS="$(echo "$ESCROW_JSON" | jq -r '.escrow.slots | length')"
 MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0')"
 
 # Timeout voting needs a strict majority of distinct slot owners, so abort if one host owns more than half of the slots.
-if [ "$MAX_SLOTS_PER_HOST" -gt $((TOTAL_SLOTS / 2)) ]; then
+if [ $((MAX_SLOTS_PER_HOST * 2)) -gt "$TOTAL_SLOTS" ]; then
   echo "=== Escrow slot distribution is too skewed for timeout voting, aborting ==="
   echo "$ESCROW_JSON" \
     | jq '{escrow_id: .escrow.id, slot_counts: ([.escrow.slots[]] | group_by(.) | map({host: .[0], slots: length}))}'
@@ -148,8 +152,14 @@ STDERR_FILE="/tmp/devshardctl-proxy-${ESCROW_ID}.log"
 DEVSHARD_PORT="8080"
 ensure_curl
 docker exec \
+  -e DEVSHARD_PRIVATE_KEY="$(cat "$GENESIS_KEY_FILE")" \
+  -e DEVSHARD_ESCROW_ID="$ESCROW_ID" \
+  -e DEVSHARD_CHAIN_REST="http://localhost:$CHAIN_REST_PORT" \
+  -e DEVSHARD_PORT="$DEVSHARD_PORT" \
+  -e DEVSHARD_STORAGE_PATH="/tmp/devshardctl-proxy-${ESCROW_ID}.db" \
+  -e DEVSHARD_ROUTE_PREFIX="/v1/devshard" \
   -d "$GENESIS_CONTAINER" \
-  sh -lc "DEVSHARD_PRIVATE_KEY='$(cat "$GENESIS_KEY_FILE")' DEVSHARD_ESCROW_ID='$ESCROW_ID' DEVSHARD_CHAIN_REST='http://localhost:$CHAIN_REST_PORT' DEVSHARD_PORT='$DEVSHARD_PORT' DEVSHARD_STORAGE_PATH='/tmp/devshardctl-proxy-${ESCROW_ID}.db' DEVSHARD_ROUTE_PREFIX='/v1/devshard' devshardctl >'$STDERR_FILE' 2>&1"
+  sh -lc "devshardctl >'$STDERR_FILE' 2>&1"
 PROXY_STARTED=1
 
 echo "=== Waiting for devshardctl to be ready ==="
@@ -231,5 +241,5 @@ SETTLEMENT_TX="$(wait_for_tx "$SETTLEMENT_TX_HASH")"
 ensure_tx_success "$SETTLEMENT_TX"
 
 echo "=== Stopping devshardctl ==="
-docker exec "$GENESIS_CONTAINER" sh -lc "pkill -f 'DEVSHARD_ESCROW_ID=$ESCROW_ID.*devshardctl' || true"
+stop_proxy
 PROXY_STARTED=0
