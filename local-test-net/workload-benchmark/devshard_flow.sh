@@ -58,7 +58,7 @@ print_proxy_logs() {
 }
 
 stop_proxy() {
-  docker exec "$GENESIS_CONTAINER" sh -lc "pkill -f 'DEVSHARD_ESCROW_ID=$ESCROW_ID.*devshardctl' || true" || true
+  docker exec -e DEVSHARD_ESCROW_ID="$ESCROW_ID" "$GENESIS_CONTAINER" sh -lc "pkill -f \"DEVSHARD_ESCROW_ID=$DEVSHARD_ESCROW_ID.*devshardctl\" || true" || true
 }
 
 cleanup() {
@@ -139,7 +139,7 @@ if ! echo "$ESCROW_JSON" | jq -e '.escrow.slots | type == "array"' >/dev/null 2>
   exit 1
 fi
 TOTAL_SLOTS="$(echo "$ESCROW_JSON" | jq -r '.escrow.slots | length')"
-# Group slots by owner address, count each group, then take the largest count.
+# Slots are owner-address strings; group equal addresses, count each group, then take the largest count.
 MAX_SLOTS_PER_HOST="$(echo "$ESCROW_JSON" | jq -r '[.escrow.slots[]] | group_by(.) | map(length) | max // 0')"
 if ! [[ "$TOTAL_SLOTS" =~ ^[0-9]+$ && "$MAX_SLOTS_PER_HOST" =~ ^[0-9]+$ ]]; then
   echo "=== Escrow slot counts are not numeric ==="
@@ -191,7 +191,7 @@ echo "=== Running load ==="
 
 # Use a minimal token budget so the request exercises the execution/signature path without adding unnecessary load.
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
-REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" --argjson max_tokens "$MIN_TOKEN_BUDGET" '{model: $model, stream: false, max_tokens: $max_tokens}')"
+REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" --argjson token_budget "$MIN_TOKEN_BUDGET" '{model: $model, stream: false, max_tokens: $token_budget}')"
 INFERENCE_URL="http://localhost:$DEVSHARD_PORT/v1/chat/completions"
 echo "=== Sending a devshard inference ==="
 HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' -X POST "$INFERENCE_URL" -H 'Content-Type: application/json' --data-binary @- <<<"$REQUEST_JSON")"
@@ -220,7 +220,7 @@ echo "=== Finalizing devshardctl (settlement JSON: $SETTLEMENT_JSON) ==="
 docker exec "$GENESIS_CONTAINER" curl -sS -X POST "http://localhost:$DEVSHARD_PORT/v1/finalize" -H 'Content-Type: application/json' \
   > "$SETTLEMENT_JSON"
 
-SETTLEMENT_KIND="$(jq -r 'if type != "object" then "non_json" elif has("error") then "error" elif (.version and .escrow_id and .state_root and .signatures) then "settlement" else "invalid" end' "$SETTLEMENT_JSON" 2>/dev/null || true)"
+SETTLEMENT_KIND="$(jq -r 'if type != "object" then "non_json" elif has("error") then "error" elif ((.version // "") != "" and (.escrow_id // "") != "" and (.state_root // "") != "" and (.signatures | type) == "array") then "settlement" else "invalid" end' "$SETTLEMENT_JSON" 2>/dev/null || true)"
 if [ "$SETTLEMENT_KIND" = "non_json" ] || [ -z "$SETTLEMENT_KIND" ]; then
   echo "=== Finalization did not return JSON ==="
   cat "$SETTLEMENT_JSON"
