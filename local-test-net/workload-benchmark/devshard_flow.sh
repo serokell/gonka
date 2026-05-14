@@ -159,8 +159,10 @@ echo "=== Running load ==="
 
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
 REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" '{model: $model, stream: false, max_tokens: 1}')"
+INFERENCE_URL="http://localhost:$DEVSHARD_PORT/v1/chat/completions"
+INFERENCE_CURL_COMMAND="curl -sS -o '$RESPONSE_FILE' -w '%{http_code}' -X POST '$INFERENCE_URL' -H 'Content-Type: application/json' --data-binary @-"
 echo "=== Sending a devshard inference ==="
-HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" sh -lc "curl -sS -o '$RESPONSE_FILE' -w '%{http_code}' -X POST 'http://localhost:$DEVSHARD_PORT/v1/chat/completions' -H 'Content-Type: application/json' --data-binary @-" <<<"$REQUEST_JSON")"
+HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" sh -lc "$INFERENCE_CURL_COMMAND" <<<"$REQUEST_JSON")"
 docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE"
 if [ "$HTTP_STATUS" != "200" ]; then
   echo "=== Devshard inference failed with HTTP $HTTP_STATUS ==="
@@ -184,6 +186,16 @@ echo "=== Finalizing devshardctl (settlement JSON: $SETTLEMENT_JSON) ==="
 docker exec "$GENESIS_CONTAINER" sh -lc "curl -sS -X POST 'http://localhost:$DEVSHARD_PORT/v1/finalize' -H 'Content-Type: application/json'" \
   > "$SETTLEMENT_JSON"
 
+if ! jq . "$SETTLEMENT_JSON" >/dev/null 2>&1; then
+  echo "=== Finalization did not return JSON ==="
+  cat "$SETTLEMENT_JSON"
+  exit 1
+fi
+if jq -e '.error' "$SETTLEMENT_JSON" >/dev/null 2>&1; then
+  echo "=== Finalization returned an error payload ==="
+  jq . "$SETTLEMENT_JSON"
+  exit 1
+fi
 if ! jq -e '.version and .escrow_id and .state_root and .signatures' "$SETTLEMENT_JSON" >/dev/null 2>&1; then
   echo "=== Finalization did not return settlement JSON ==="
   cat "$SETTLEMENT_JSON"
