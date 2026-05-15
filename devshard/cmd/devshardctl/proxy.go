@@ -258,7 +258,9 @@ func (p *Proxy) handleTimeout(ctx context.Context, prepared *user.PreparedInfere
 	// VerifyExecutionTimeout then consistently returns "expected started, got
 	// pending" because MsgConfirmStart was never forwarded to them, making it
 	// impossible to collect sufficient votes for an execution timeout.
-	_ = p.session.FlushPendingDiff()
+	if err := p.session.FlushPendingDiff(); err != nil {
+		log.Printf("inference %d: flush pending diff failed (continuing): %v", nonce, err)
+	}
 
 	verifiers := p.session.TimeoutVerifiers()
 	storedDiffs := p.session.Diffs()

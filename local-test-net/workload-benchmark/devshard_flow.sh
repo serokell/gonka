@@ -147,8 +147,8 @@ if ! [[ "$TOTAL_SLOTS" =~ ^[0-9]+$ && "$MAX_SLOTS_PER_HOST" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-# Timeout voting needs a strict majority of distinct slot owners, so abort if one host owns more than half of the slots.
-if [ $((MAX_SLOTS_PER_HOST * 2)) -gt "$TOTAL_SLOTS" ]; then
+# Timeout voting needs a strict majority of distinct slot owners, so abort if one host owns half or more of the slots.
+if [ $((MAX_SLOTS_PER_HOST * 2)) -ge "$TOTAL_SLOTS" ]; then
   echo "=== Escrow slot distribution is too skewed for timeout voting, aborting ==="
   echo "$ESCROW_JSON" \
     | jq '{escrow_id: .escrow.id, slot_counts: ([.escrow.slots[]] | group_by(.) | map({host: .[0], slots: length}))}'
