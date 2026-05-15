@@ -252,6 +252,14 @@ func (p *Proxy) handleTimeout(ctx context.Context, prepared *user.PreparedInfere
 		StartedAt:   params.StartedAt,
 	}
 
+	// Flush MsgConfirmStart (and any other pending txs) into a diff before
+	// collecting votes. Without this, verifiers apply catch-up diffs that only
+	// contain MsgStartInference and see the inference as StatusPending.
+	// VerifyExecutionTimeout then consistently returns "expected started, got
+	// pending" because MsgConfirmStart was never forwarded to them, making it
+	// impossible to collect sufficient votes for an execution timeout.
+	_ = p.session.FlushPendingDiff()
+
 	verifiers := p.session.TimeoutVerifiers()
 	storedDiffs := p.session.Diffs()
 

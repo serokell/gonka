@@ -576,6 +576,25 @@ func (s *Session) AddPendingTimeoutTx(inferenceID uint64, reason types.TimeoutRe
 	})
 }
 
+// FlushPendingDiff composes any pending txs (e.g. MsgConfirmStart from the
+// executor's receipt) into a new diff and applies it locally without sending
+// it to any host. It is a no-op when there are no pending txs.
+//
+// Call this before CollectTimeoutVotes so that the catch-up diffs forwarded
+// to verifiers include MsgConfirmStart and the inference is seen as
+// StatusStarted rather than StatusPending on the verifier side. Without this
+// step VerifyExecutionTimeout always returns "expected started, got pending"
+// and no timeout votes can be collected.
+func (s *Session) FlushPendingDiff() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.pendingTxs) == 0 {
+		return nil
+	}
+	_, _, err := s.composeDiffLocked(nil)
+	return err
+}
+
 // SendPendingDiff creates a diff from pending txs (no new MsgStartInference),
 // applies it locally, and sends it to the next host. Used for timeout submission.
 func (s *Session) SendPendingDiff(ctx context.Context) error {
