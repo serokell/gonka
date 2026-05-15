@@ -193,21 +193,35 @@ echo "=== Running load ==="
 RESPONSE_FILE="/tmp/devshard-inference-${ESCROW_ID}.json"
 REQUEST_JSON="$(jq -cn --arg model "$MODEL_ID" --argjson token_budget "$MIN_TOKEN_BUDGET" '{model: $model, stream: false, max_tokens: $token_budget}')"
 INFERENCE_URL="http://localhost:$DEVSHARD_PORT/v1/chat/completions"
-echo "=== Sending a devshard inference ==="
-HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' -X POST "$INFERENCE_URL" -H 'Content-Type: application/json' --data-binary @- <<<"$REQUEST_JSON")"
-INFERENCE_RESPONSE="$(docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE")"
-echo "$INFERENCE_RESPONSE"
-if [ "$HTTP_STATUS" != "200" ]; then
-  echo "=== Devshard inference failed with HTTP $HTTP_STATUS ==="
-  exit 1
-fi
-if ! echo "$INFERENCE_RESPONSE" | jq . >/dev/null 2>&1; then
-  echo "=== Devshard inference did not return JSON ==="
-  exit 1
-fi
-if echo "$INFERENCE_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
-  echo "=== Devshard inference returned an error payload ==="
-  echo "$INFERENCE_RESPONSE" | jq .
+
+# Mirror testermint's sendChatCompletion: use --max-time 30 so a transient ML-node
+# hiccup cancels the request (and the proxy's context) quickly rather than hanging
+# for the full RefusalTimeout (60 s) before the proxy gives up and tries to collect
+# timeout votes that may themselves be transiently unavailable.  Retry up to 5
+# times so a single transient failure doesn't abort the whole flow.
+MAX_INFERENCE_ATTEMPTS=5
+INFERENCE_SUCCESS=0
+for attempt in $(seq 1 "$MAX_INFERENCE_ATTEMPTS"); do
+  echo "=== Sending a devshard inference (attempt $attempt/$MAX_INFERENCE_ATTEMPTS) ==="
+  HTTP_STATUS="$(docker exec -i "$GENESIS_CONTAINER" curl -sS --connect-timeout 5 --max-time 30 \
+    -o "$RESPONSE_FILE" -w '%{http_code}' \
+    -X POST "$INFERENCE_URL" -H 'Content-Type: application/json' --data-binary @- <<<"$REQUEST_JSON")" || true
+  INFERENCE_RESPONSE="$(docker exec "$GENESIS_CONTAINER" cat "$RESPONSE_FILE" 2>/dev/null || true)"
+  echo "$INFERENCE_RESPONSE"
+  if [ "$HTTP_STATUS" = "200" ] && echo "$INFERENCE_RESPONSE" | jq . >/dev/null 2>&1 && \
+     ! echo "$INFERENCE_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
+    INFERENCE_SUCCESS=1
+    break
+  fi
+  echo "=== Inference attempt $attempt failed (HTTP $HTTP_STATUS), retrying... ==="
+  if [ "$attempt" -lt "$MAX_INFERENCE_ATTEMPTS" ]; then
+    sleep 2
+  fi
+done
+
+if [ "$INFERENCE_SUCCESS" -ne 1 ]; then
+  echo "=== Devshard inference failed after $MAX_INFERENCE_ATTEMPTS attempts ==="
+  echo "$INFERENCE_RESPONSE"
   exit 1
 fi
 
