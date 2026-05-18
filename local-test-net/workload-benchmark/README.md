@@ -53,14 +53,16 @@ Run the following in the same terminal session.
 ./loadserver_rebuild_and_run.sh
 ```
 
-### Start the devshard flow
+### Run the devshard benchmark flow from testermint
 
-Run the following in the same terminal session.
+The devshard flow is now executed by testermint (`DevshardBenchmarkTests`) instead of a standalone shell script.
+
+From `testermint/`, run:
 ```
-./devshard_flow.sh
+./gradlew test --tests '*DevshardBenchmarkTests' -x mock_server:test
 ```
 
-The script stops early if the devshard inference or finalization returns an error payload, which helps catch slot-distribution and timeout-voting issues before submitting settlement on-chain.
+This test performs the devshard setup/settlement flow and launches `run_experiment.sh` in the benchmark container.
 
 ### Start the benchmark
 
